@@ -12,13 +12,13 @@ I will be using tools such as AMD uProf as well as Intel vTune (on different pro
 This will enable me to see which parts of the source are using the most CPU time, and I will try to find optimizations to lower scan times.\
 The benches I will use have the following specs:
 
-### Bench 1 - Desktop AMD Build
+##### Bench 1 - Desktop AMD Build
 Motherboard: MSI MPG B650 Carbon Wifi\
 CPU: AMD Ryzen 9 7900X\
 GPU: Intel Arc A770 16GB LE\
 RAM: 32GB CL36 Corsair Vengeance DDR5 5600 MHz
 
-### Bench 2 - Intel Laptop
+##### Bench 2 - Intel Laptop
 Motherboard: Octavia CFS\
 CPU: Intel Core i5 9300H\
 GPU: Nvidia GeForce GTX 1650\

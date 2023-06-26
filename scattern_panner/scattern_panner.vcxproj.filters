@@ -18,4 +18,7 @@
       <Filter>source files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\readme.md" />
+  </ItemGroup>
 </Project>

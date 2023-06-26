@@ -31,5 +31,5 @@ Also, I can use hardware-level profiling on both platforms to ensure that everyt
 If people wish to contribute or provide comments on this project, I will gladly accept them.\
 Simply create a new issue and I will get back to you within a week probably, or just message me on discord (if you have it).
 
-### Credits
+## Credits
 As more people help contribute to this project, this list will expand.

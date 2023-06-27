@@ -25,11 +25,11 @@ process::process(const std::string_view process_name)
 					{
 						// Reason for this is that we're going to just have zeroes
 						std::erase_if(module_name, [](const char c)
-							{
-								if (c == 0)
-									return true;
-								return false;
-							});
+						{
+							if (c == 0)
+								return true;
+							return false;
+						});
 
 						if (module_name == process_name.data())
 						{

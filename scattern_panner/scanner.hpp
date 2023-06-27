@@ -45,6 +45,11 @@ struct process
 	explicit process(const std::string_view process_name);
 };
 
+namespace scanner
+{
+	// The format should be "\xED\xEF\x0E", "??x"
+	std::vector<scan_result> aob_scan(const scan_cfg& config, const std::string_view aob, const std::string_view mask);
+}
 
 int main()
 {

@@ -8,11 +8,12 @@
 #include <processthreadsapi.h>
 #include <thread>
 
+
 namespace scanner_cfg_templates
 {
 	const auto page_flag_check_default = [](const std::uintptr_t page_flags) -> bool
 	{
-		if (page_flags != PAGE_NOACCESS and page_flags != PAGE_EXECUTE and page_flags != PAGE_GUARD)
+		if (!(page_flags bitand (PAGE_NOACCESS bitor PAGE_EXECUTE bitor PAGE_GUARD))) // credits to Fishy
 			return true;
 		return false;
 	};
@@ -30,7 +31,10 @@ struct scan_cfg
 	std::function<bool(const std::uintptr_t)> page_flag_check = scanner_cfg_templates::page_flag_check_default;
 
 	// Minimum and Maximum page size (in bytes)
-	std::uintptr_t min_page_size = 0ull, max_page_size = ~0ull;
+	std::uintptr_t min_page_size = 0ull, max_page_size = ~0ull; // credits to Fishy for the suggestion using bit not instead of 0xFFFFFFFFFFFFFFFF
+
+	// Are we scanning a specific module?
+	std::string module_scanned;
 
 	std::function<std::vector<scan_result>()> scan_routine; // Ignore this shit atm
 };
@@ -41,17 +45,20 @@ struct process
 	std::uintptr_t pid;
 
 	HANDLE curr_proc { nullptr };
-
+	HMODULE curr_mod { nullptr };
 	explicit process(const std::string_view process_name);
 };
 
 namespace scanner
 {
 	// The format should be "\xED\xEF\x0E", "??x"
-	std::vector<scan_result> aob_scan(const scan_cfg& config, const std::string_view aob, const std::string_view mask);
+	std::vector<scan_result> aob_scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config = {});
 }
 
 int main()
 {
 	const auto a = process("scattern_panner.exe");
+	std::cout << a.pid << "\r\n";
+
+	scanner::aob_scan(a, "\xEF\xED", "??");
 }

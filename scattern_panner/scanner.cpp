@@ -97,9 +97,7 @@ std::vector<scan_result> scanner::aob_scan(const process& proc, const std::strin
 
 		MODULEINFO mod_info;
 		if (K32GetModuleInformation(proc.curr_proc, mod_found, &mod_info, sizeof(mod_info)))
-		{
 			return reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
-		}
 
 		return static_cast<std::uintptr_t>(0);
 	}();

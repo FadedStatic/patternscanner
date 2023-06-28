@@ -25,6 +25,7 @@
 #include <functional>
 #include <iostream>
 #include <Windows.h>
+#include <shared_mutex>
 #include <string_view>
 #include <Psapi.h>
 #include <processthreadsapi.h>
@@ -45,11 +46,12 @@ namespace scanner_cfg_templates
 	const auto page_flag_check_default = [](const std::uintptr_t page_flags) -> bool
 	{
 		// Credits to Fishy for this genius optimization (see credits in readme for more information)
-		return !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE)) && page_flags != PAGE_EXECUTE;
+		return !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ)) && !(page_flags == PAGE_EXECUTE && !(page_flags & (PAGE_GUARD | PAGE_NOACCESS)));
 	};
 
 	// Reference the cpp file for more information about this.
-	std::vector<scan_result> aob_scan_routine_internal_default(const std::uintptr_t start, const std::uintptr_t end, const std::string_view aob, const std::string_view mask), aob_scan_routine_external_default(const std::uintptr_t start, const std::uintptr_t end, const std::string_view aob, const std::string_view mask);
+	void aob_scan_routine_internal_default(const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask),
+		 aob_scan_routine_external_default(const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask);
 }
 
 // Struct for configuring scans.
@@ -67,7 +69,7 @@ struct scan_cfg
 	// Change these dependent on the scan function.
 	// By default, this is AOB scanning.
 	// This is more useful if you need to scan for something more specific (opaque predicates etc)
-	std::function<std::vector<scan_result>(const std::uintptr_t, const std::uintptr_t, const std::string_view, const std::string_view)> scan_routine_internal = scanner_cfg_templates::aob_scan_routine_internal_default, scan_routine_external = scanner_cfg_templates::aob_scan_routine_external_default;
+	std::function<void(const std::uintptr_t, const std::uintptr_t, std::shared_mutex&, std::vector<scan_result>&, const std::string_view, const std::string_view) > scan_routine_internal = scanner_cfg_templates::aob_scan_routine_internal_default, scan_routine_external = scanner_cfg_templates::aob_scan_routine_external_default;
 };
 
 // Struct for process, this will just have like the pid and the PROCESS

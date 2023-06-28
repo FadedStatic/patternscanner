@@ -75,6 +75,9 @@ process::process(const std::string_view process_name)
 
 std::vector<scan_result> scanner::scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config)
 {
+	std::vector<std::thread> thread_list;
+
+	std::shared_mutex ret_lock;
 	std::vector<scan_result> ret;
 
 	const auto is_internal = (GetCurrentProcessId() == proc.pid);
@@ -150,41 +153,27 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	if (!mod_found)
 		return ret;
 
-	std::printf("Base Address: %02llX\nEnd Address: %02llX\n", scan_base_address, scan_end_address);
-
-	auto scan_address = scan_base_address;
 	MEMORY_BASIC_INFORMATION mbi;
 
-	if (is_internal)
+	for (auto scan_address = scan_base_address; scan_address < scan_end_address; scan_address += 16)
 	{
-		for (;scan_address < scan_end_address; scan_address += 16)
+		// Credits to Fishy for suggesting I spam ternary once more
+		if (is_internal ? !VirtualQuery(reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)) : !VirtualQueryEx(proc.curr_proc, reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
+			break;
+
+		if (config.page_flag_check(mbi.Protect))
 		{
-			if (!VirtualQuery(reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
-				break;
-
-			if (config.page_flag_check(mbi.Protect))
-			{
-				std::printf("Page found at: %02llX\nPage size: %llu\n", reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), mbi.RegionSize);
-			}
-
-			scan_address += mbi.RegionSize;
+			std::printf("Page found at: %02llX\nPage size: %llu\n", reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), mbi.RegionSize);
+			// const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask
+			std::thread analyze_page{is_internal ? config.scan_routine_internal : config.scan_routine_external, reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, ret_lock, ret, aob, mask};
+			thread_list.emplace_back(std::move(analyze_page));
 		}
-	}
-	else
-	{
-		for (; scan_address < scan_end_address; scan_address += 16)
-		{
-			if (!VirtualQueryEx(proc.curr_proc, reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
-				break;
 
-			if (config.page_flag_check(mbi.Protect))
-			{
-				std::printf("Page found at: %02llX\nPage size: %llu\n", reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), mbi.RegionSize);
-			}
-
-			scan_address += mbi.RegionSize;
-		}
+		scan_address += mbi.RegionSize;
 	}
+
+	for (auto& thread : thread_list)
+		thread.join();
 
 	return ret;
 }

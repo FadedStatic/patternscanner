@@ -5,6 +5,8 @@ VisualStudioVersion = 17.6.33626.354
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "scattern_panner", "scattern_panner\scattern_panner.vcxproj", "{A7465EDA-4F0D-462E-8457-A8B81A16DEF3}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "victim_app", "victim_app\victim_app.vcxproj", "{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,14 @@ Global
 		{A7465EDA-4F0D-462E-8457-A8B81A16DEF3}.Release|x64.Build.0 = Release|x64
 		{A7465EDA-4F0D-462E-8457-A8B81A16DEF3}.Release|x86.ActiveCfg = Release|Win32
 		{A7465EDA-4F0D-462E-8457-A8B81A16DEF3}.Release|x86.Build.0 = Release|Win32
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Debug|x64.ActiveCfg = Debug|x64
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Debug|x64.Build.0 = Debug|x64
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Debug|x86.ActiveCfg = Debug|Win32
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Debug|x86.Build.0 = Debug|Win32
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Release|x64.ActiveCfg = Release|x64
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Release|x64.Build.0 = Release|x64
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Release|x86.ActiveCfg = Release|Win32
+		{C65DCF53-E343-40C7-8ADC-BBA9B87D4ACF}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

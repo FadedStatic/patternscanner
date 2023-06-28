@@ -1,15 +1,37 @@
+/*
+ * Copyright 2023 FadedStatic
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 #include "scanner.hpp"
 
 
 process::process(const std::string_view process_name)
 {
-	std::vector<std::uint32_t> pid_list(1024); // adjust these values if you're running into index errors
-	std::vector<HMODULE> module_list(512);
+	std::vector<std::uint32_t> pid_list(max_processes); // adjust these values if you're running into index errors
+	std::vector<HMODULE> module_list(max_modules);
 	DWORD n_pids{ 0 };
 	K32EnumProcesses(reinterpret_cast<DWORD*>(pid_list.data()), static_cast<std::uint32_t>(pid_list.capacity()) * sizeof(DWORD), &n_pids);
 
 	pid_list.resize(n_pids / 4); // shrink that heap alloc so it isn't that bad
-	std::string module_name(260, '\x0'); // MAX_FILE
+	std::string module_name(MAX_PATH, '\x0'); // MAX_FILE
 	const auto default_mod_name = module_name;
 
 	for (const auto i : pid_list)
@@ -22,7 +44,7 @@ process::process(const std::string_view process_name)
 				module_list.resize(n_modules / sizeof(HMODULE));
 				for (const auto& j : module_list)
 				{
-					if (K32GetModuleBaseNameA(proc_handle, j, module_name.data(), 260))
+					if (K32GetModuleBaseNameA(proc_handle, j, module_name.data(), MAX_PATH))
 					{
 						// Reason for this is that we're going to just have zeroes
 						std::erase_if(module_name, [](const char c)
@@ -40,17 +62,18 @@ process::process(const std::string_view process_name)
 					}
 
 					module_name.clear();
-					module_name.resize(260);
+					module_name.resize(MAX_PATH);
 				}
 
 				module_list.clear();
-				module_list.resize(1024);
+				module_list.resize(max_modules);
 			}
 		}
 	}
+	throw std::runtime_error("Process not found.");
 }
 
-std::vector<scan_result> scanner::aob_scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config)
+std::vector<scan_result> scanner::scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config)
 {
 	std::vector<scan_result> ret;
 
@@ -67,16 +90,16 @@ std::vector<scan_result> scanner::aob_scan(const process& proc, const std::strin
 		if (is_modulerange)
 		{
 			mod_found = [proc, config] {
-				std::vector<HMODULE> module_list(512);
+				std::vector<HMODULE> module_list(max_modules);
 				DWORD n_modules{ 0 };
-				std::string module_name(260, '\x0');
+				std::string module_name(MAX_PATH, '\x0');
 
 				if (K32EnumProcessModulesEx(proc.curr_proc, module_list.data(), static_cast<std::uint32_t>(module_list.capacity()) * sizeof(HMODULE), &n_modules, LIST_MODULES_ALL))
 				{
 					module_list.resize(n_modules / sizeof(HMODULE));
 					for (const auto& j : module_list)
 					{
-						if (K32GetModuleBaseNameA(proc.curr_proc, j, module_name.data(), 260))
+						if (K32GetModuleBaseNameA(proc.curr_proc, j, module_name.data(), MAX_PATH))
 						{
 							std::erase_if(module_name, [](const char c)
 							{
@@ -88,10 +111,10 @@ std::vector<scan_result> scanner::aob_scan(const process& proc, const std::strin
 						}
 
 						module_name.clear();
-						module_name.resize(260);
+						module_name.resize(MAX_PATH);
 					}
 				}
-				return reinterpret_cast<HMODULE>(0);
+				throw std::runtime_error("No module found under this name.");
 			}();
 		}
 
@@ -99,12 +122,13 @@ std::vector<scan_result> scanner::aob_scan(const process& proc, const std::strin
 		if (K32GetModuleInformation(proc.curr_proc, mod_found, &mod_info, sizeof(mod_info)))
 			return reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
 
-		return static_cast<std::uintptr_t>(0);
+		throw std::runtime_error("Error getting module base address. Call GetLastError to see problem.");
 	}();
 
 	if (!mod_found)
 		return ret;
 
+	std::printf("%02llX", scan_base_address);
 	if (is_internal)
 	{
 		// Be very intelligent here
@@ -112,7 +136,6 @@ std::vector<scan_result> scanner::aob_scan(const process& proc, const std::strin
 	}
 	else
 	{
-		
 	}
 
 	return ret;

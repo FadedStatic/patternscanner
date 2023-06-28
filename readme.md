@@ -33,3 +33,4 @@ Simply create a new issue and I will get back to you within a week probably, or 
 
 ## Credits
 As more people help contribute to this project, this list will expand.
+[Fishy](https://github.com/Fish-Sticks) - General Consultation & Optimization 

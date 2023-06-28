@@ -44,7 +44,8 @@ namespace scanner_cfg_templates
 	// Argument must be std::uintptr_t and return must be bool.
 	const auto page_flag_check_default = [](const std::uintptr_t page_flags) -> bool
 	{
-		return !(page_flags bitand PAGE_NOACCESS) and !(page_flags bitand PAGE_GUARD) and ((page_flags bitand PAGE_READWRITE) or (page_flags bitand PAGE_READONLY) or (page_flags bitand PAGE_EXECUTE_READWRITE)) and !(page_flags bitand PAGE_EXECUTE);
+		// Credits to Fishy for this genius optimization (see credits in readme for more information)
+		return !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE)) && page_flags != PAGE_EXECUTE;
 	};
 
 	// Reference the cpp file for more information about this.

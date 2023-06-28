@@ -20,18 +20,17 @@
  * SOFTWARE.
  */
 
-#include <iostream>
-#include <Windows.h>
-#include <string_view>
-
-std::uintptr_t get_module_base_address(const std::string_view str)
-{
-	return reinterpret_cast<std::uintptr_t>(str.empty() ? GetModuleHandleA(nullptr) : GetModuleHandleA(str.data()));
-}
+#include "scanner.hpp"
 
 int main()
 {
-	SetConsoleTitleA("Pattern Scanner Testing Application");
-	std::printf("Program Base Address: %02llX\nntdll.dll Base: %02llX\n", get_module_base_address(""), get_module_base_address("ntdll.dll"));
-	std::cin.get();
+	const auto a = process("victim_app.exe");
+	std::cout << a.pid << "\r\n";
+
+	const scan_cfg cfg =
+	{
+		"ntdll.dll"
+	};
+
+	scanner::scan(a, "\xEF\xED", "??", cfg);
 }

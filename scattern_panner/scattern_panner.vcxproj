@@ -132,6 +132,7 @@
     <ClInclude Include="scanner.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="example_main.cpp" />
     <ClCompile Include="scanner.cpp" />
   </ItemGroup>
   <ItemGroup>

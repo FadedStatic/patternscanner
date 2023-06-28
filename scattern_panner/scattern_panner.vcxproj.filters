@@ -17,6 +17,7 @@
     <ClCompile Include="scanner.cpp">
       <Filter>source files</Filter>
     </ClCompile>
+    <ClCompile Include="example_main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\readme.md" />

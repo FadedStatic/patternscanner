@@ -82,8 +82,8 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	auto mod_found = proc.curr_mod;
 
 	const auto scan_base_address = is_internal ? 
-	[config] {
-		return reinterpret_cast<std::uintptr_t>(GetModuleHandleA(config.module_scanned.data()));
+	[config, is_modulerange] {
+		return reinterpret_cast<std::uintptr_t>(is_modulerange ? GetModuleHandleA(nullptr) : GetModuleHandleA(config.module_scanned.data()));
 	}()
 	:
 	[proc, config, &mod_found, is_modulerange] {
@@ -122,20 +122,68 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 		if (K32GetModuleInformation(proc.curr_proc, mod_found, &mod_info, sizeof(mod_info)))
 			return reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
 
-		throw std::runtime_error("Error getting module base address. Call GetLastError to see problem.");
+		throw std::runtime_error("Error getting module base address. Call GetLastError for more information.");
+	}();
+
+	const auto scan_end_address = is_internal ?
+	[config, proc, scan_base_address, is_modulerange]
+	{
+		return is_modulerange ? [config, proc, scan_base_address]
+		{
+			MODULEINFO mod_info;
+			if (K32GetModuleInformation(proc.curr_proc, GetModuleHandleA(config.module_scanned.data()), &mod_info, sizeof(mod_info)))
+				return scan_base_address + mod_info.SizeOfImage;
+
+			throw std::runtime_error("Error getting end address from module in GetModuleInformation. Call GetLastError for more information.");
+		}() : ~0ull;
+	}()
+	:
+	[proc, mod_found, scan_base_address]
+	{
+		MODULEINFO mod_info;
+		if (K32GetModuleInformation(proc.curr_proc, mod_found, &mod_info, sizeof(mod_info)))
+			return scan_base_address + reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
+
+		throw std::runtime_error("Error getting end address from module in GetModuleInformation. Call GetLastError for more information. Type 2.");
 	}();
 
 	if (!mod_found)
 		return ret;
 
-	std::printf("%02llX", scan_base_address);
+	std::printf("Base Address: %02llX\nEnd Address: %02llX\n", scan_base_address, scan_end_address);
+
+	auto scan_address = scan_base_address;
+	MEMORY_BASIC_INFORMATION mbi;
+
 	if (is_internal)
 	{
-		// Be very intelligent here
-		return ret;
+		for (;scan_address < scan_end_address; scan_address += 16)
+		{
+			if (!VirtualQuery(reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
+				break;
+
+			if (config.page_flag_check(mbi.Protect))
+			{
+				std::printf("Page found at: %02llX\nPage size: %llu\n", reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), mbi.RegionSize);
+			}
+
+			scan_address += mbi.RegionSize;
+		}
 	}
 	else
 	{
+		for (; scan_address < scan_end_address; scan_address += 16)
+		{
+			if (!VirtualQueryEx(proc.curr_proc, reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
+				break;
+
+			if (config.page_flag_check(mbi.Protect))
+			{
+				std::printf("Page found at: %02llX\nPage size: %llu\n", reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), mbi.RegionSize);
+			}
+
+			scan_address += mbi.RegionSize;
+		}
 	}
 
 	return ret;

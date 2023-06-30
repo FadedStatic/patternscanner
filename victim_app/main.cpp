@@ -29,6 +29,7 @@ __declspec(noinline) std::uintptr_t get_module_base_address(const std::string_vi
 	return reinterpret_cast<std::uintptr_t>(str.empty() ? GetModuleHandleA(nullptr) : GetModuleHandleA(str.data()));
 }
 
+__declspec(noinline) iter_all
 int main()
 {
 	SetConsoleTitleA("Pattern Scanner Testing Application");

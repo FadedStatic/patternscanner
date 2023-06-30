@@ -220,7 +220,15 @@ void scanner_cfg_templates::aob_scan_routine_external_default(const process& pro
 
 		local_results.push_back({ i+start });
 		out_of_scope:
-		continue;
+		continue; // compiler gets mad if this isnt here
+	}
+
+	if (!local_results.empty())
+	{
+		return_vector_mutex.lock();
+		for (const auto& c : local_results)
+			return_vector.push_back(c);
+		return_vector_mutex.unlock();
 	}
 }
 

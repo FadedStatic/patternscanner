@@ -192,7 +192,7 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 
 #if PERFORMANCE_PROFILING_MODE == true
 	const auto end_time = std::chrono::high_resolution_clock::now();
-	std::printf("Time taken to work: %lldms\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+	std::printf("Time taken: %lldms\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
 #endif
 
 	return ret;

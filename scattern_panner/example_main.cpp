@@ -29,8 +29,8 @@ int main()
 
 	const scan_cfg cfg =
 	{
-		"ntdll.dll"
+		//"ntdll.dll"
 	};
 
-	scanner::scan(a, "\xEF\xED", "??", cfg);
+	scanner::scan(a, "\x48\x83\x79\x00\x00\x75\x09\x33\xC9\x48\xFF\x25\x00\x00\x00\x00\x48\x8B\x09\x48\xFF\x25\x00\x00\x00\x00", "xxx??xxxxxxx????xxxxxx????", cfg);
 }

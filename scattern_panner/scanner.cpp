@@ -23,6 +23,10 @@
 #include "scanner.hpp"
 
 
+#if PERFORMANCE_PROFILING_MODE == true
+	#include <chrono>
+#endif
+
 process::process(const std::string_view process_name)
 {
 	std::vector<std::uint32_t> pid_list(max_processes); // adjust these values if you're running into index errors
@@ -75,6 +79,15 @@ process::process(const std::string_view process_name)
 
 std::vector<scan_result> scanner::scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config)
 {
+#if SET_PRIORITY_OPTIMIZATION == true
+	const auto old_priority = GetPriorityClass(GetCurrentProcess());
+	SetPriorityClass(GetCurrentProcess(), REALTIME_PRIORITY_CLASS);
+#endif
+
+#if PERFORMANCE_PROFILING_MODE == true
+	const auto start_time = std::chrono::high_resolution_clock::now();
+#endif
+
 	std::vector<std::thread> thread_list;
 
 	std::shared_mutex ret_lock;
@@ -163,10 +176,8 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 
 		if (config.page_flag_check(mbi.Protect))
 		{
-			std::printf("Page found at: %02llX\nPage size: %llu\n", reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), mbi.RegionSize);
-			// const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask
-			std::thread analyze_page{is_internal ? config.scan_routine_internal : config.scan_routine_external, reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, ret_lock, ret, aob, mask};
-			thread_list.emplace_back(std::move(analyze_page));
+			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external), std::ref(proc), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, std::ref(ret_lock), std::ref(ret), std::ref(aob), std::ref(mask));
+			thread_list.push_back(std::move(analyze_page));
 		}
 
 		scan_address += mbi.RegionSize;
@@ -175,5 +186,46 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	for (auto& thread : thread_list)
 		thread.join();
 
+#if SET_PRIORITY_OPTIMIZATION == true
+	SetPriorityClass(GetCurrentProcess(), old_priority);
+#endif
+
+#if PERFORMANCE_PROFILING_MODE == true
+	const auto end_time = std::chrono::high_resolution_clock::now();
+	std::printf("Time taken to work: %lldms\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+#endif
+
 	return ret;
+}
+
+void scanner_cfg_templates::aob_scan_routine_external_default(const process& proc, const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask)
+{
+	const auto page_size = end - start;
+	std::size_t n_read;
+	std::vector<std::uint8_t> page_memory(page_size);
+
+	// Chunking, instead of locking the mutex (very slow) just do it when we're done.
+	std::vector<scan_result> local_results;
+
+	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, &n_read);
+
+	for (auto i = 0ull; i < page_memory.size(); i++)
+	{
+		for (auto j = 0ull; j < mask.length(); j++)
+		{
+			if (mask[j] != '?' and (page_memory[i + j] != static_cast<std::uint8_t>(aob[j])))
+				goto out_of_scope;
+
+		}
+
+		std::printf("Match at: %02llX\n", i+start);
+		local_results.push_back({ i+start });
+		out_of_scope:
+		continue;
+	}
+}
+
+void scanner_cfg_templates::aob_scan_routine_internal_default(const process& proc, const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask)
+{
+	return;
 }

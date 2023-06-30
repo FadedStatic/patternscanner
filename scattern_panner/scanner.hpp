@@ -31,12 +31,30 @@
 #include <processthreadsapi.h>
 #include <thread>
 
+// This part will be using preprocessor macros so that performance profiling isnt compiled by default, this way we save a negligible amount of CPU time
+#define PERFORMANCE_PROFILING_MODE true // true = true, false = false
+// False by default, this will set the priority of the process for better use of resources (faster scanning), this is advised for external applications but not for internal, as it could be detected easily.
+// Also note, this will set the priority back to the old priority when we are done with scanning.
+#define SET_PRIORITY_OPTIMIZATION false 
+
+
+// Misc. Settings for the 
 constexpr auto max_modules = 512; // 512 by default
 constexpr auto max_processes = 1024; // 1024 by default
 
 struct scan_result
 {
 	std::uintptr_t loc;
+};
+
+// Struct for process, this will just have like the pid and the PROCESS
+struct process
+{
+	std::uintptr_t pid;
+
+	HANDLE curr_proc{ nullptr };
+	HMODULE curr_mod{ nullptr };
+	explicit process(const std::string_view process_name);
 };
 
 namespace scanner_cfg_templates
@@ -50,8 +68,8 @@ namespace scanner_cfg_templates
 	};
 
 	// Reference the cpp file for more information about this.
-	void aob_scan_routine_internal_default(const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask),
-		 aob_scan_routine_external_default(const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask);
+	void aob_scan_routine_internal_default(const process& proc, const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask),
+		 aob_scan_routine_external_default(const process& proc, const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask);
 }
 
 // Struct for configuring scans.
@@ -69,17 +87,7 @@ struct scan_cfg
 	// Change these dependent on the scan function.
 	// By default, this is AOB scanning.
 	// This is more useful if you need to scan for something more specific (opaque predicates etc)
-	std::function<void(const std::uintptr_t, const std::uintptr_t, std::shared_mutex&, std::vector<scan_result>&, const std::string_view, const std::string_view) > scan_routine_internal = scanner_cfg_templates::aob_scan_routine_internal_default, scan_routine_external = scanner_cfg_templates::aob_scan_routine_external_default;
-};
-
-// Struct for process, this will just have like the pid and the PROCESS
-struct process
-{
-	std::uintptr_t pid;
-
-	HANDLE curr_proc { nullptr };
-	HMODULE curr_mod { nullptr };
-	explicit process(const std::string_view process_name);
+	std::function<void(const process&, const std::uintptr_t, const std::uintptr_t, std::shared_mutex&, std::vector<scan_result>&, const std::string_view, const std::string_view) > scan_routine_internal = scanner_cfg_templates::aob_scan_routine_internal_default, scan_routine_external = scanner_cfg_templates::aob_scan_routine_external_default;
 };
 
 namespace scanner

@@ -24,7 +24,7 @@
 #include <Windows.h>
 #include <string_view>
 
-std::uintptr_t get_module_base_address(const std::string_view str)
+__declspec(noinline) std::uintptr_t get_module_base_address(const std::string_view str)
 {
 	return reinterpret_cast<std::uintptr_t>(str.empty() ? GetModuleHandleA(nullptr) : GetModuleHandleA(str.data()));
 }

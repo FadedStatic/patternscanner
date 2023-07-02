@@ -58,6 +58,22 @@ process::process(const std::string_view process_name)
 
 						if (module_name == process_name.data())
 						{
+							this->proc_base = (i == GetCurrentProcessId()) ? reinterpret_cast<std::uintptr_t>(GetModuleHandleA(nullptr)) :
+							[proc_handle, j] {
+								MODULEINFO mod_info;
+								if (K32GetModuleInformation(proc_handle, j, &mod_info, sizeof(mod_info)))
+									return reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
+								return static_cast<std::uintptr_t>(0);
+							}();
+
+							this->is32 = [proc_handle]
+							{
+								BOOL is_wow = FALSE;
+								if (IsWow64Process(proc_handle, &is_wow))
+									return static_cast<bool>(is_wow);
+
+								return true; // this wont change anything.
+							}();
 							this->curr_proc = proc_handle;
 							this->pid = i;
 							this->curr_mod = j;
@@ -176,7 +192,7 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 
 		if (config.page_flag_check(mbi.Protect))
 		{
-			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external), std::ref(proc), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, std::ref(ret_lock), std::ref(ret), std::ref(aob), std::ref(mask));
+			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external),(scanner_args{ std::ref(proc), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, std::ref(ret_lock), std::ref(ret), std::ref(aob), std::ref(mask) }));
 			thread_list.push_back(std::move(analyze_page));
 		}
 
@@ -198,8 +214,9 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	return ret;
 }
 
-void scanner_cfg_templates::aob_scan_routine_external_default(const process& proc, const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask)
+void scanner_cfg_templates::aob_scan_routine_external_default(const scanner_args& args)
 {
+	const auto [proc, start, end, return_vector_mutex, return_vector, aob, mask] = args;
 	const auto page_size = end - start;
 	std::size_t n_read;
 	std::vector<std::uint8_t> page_memory(page_size);
@@ -232,7 +249,7 @@ void scanner_cfg_templates::aob_scan_routine_external_default(const process& pro
 	}
 }
 
-void scanner_cfg_templates::aob_scan_routine_internal_default(const process& proc, const std::uintptr_t start, const std::uintptr_t end, std::shared_mutex& return_vector_mutex, std::vector<scan_result>& return_vector, const std::string_view aob, const std::string_view mask)
+void scanner_cfg_templates::aob_scan_routine_internal_default(const scanner_args& args)
 {
 	return;
 }

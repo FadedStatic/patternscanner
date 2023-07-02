@@ -24,7 +24,7 @@
 
 int main()
 {
-	const auto a = process("victim_app.exe");
+	auto a = process("Windows10Universal.exe");
 	std::cout << a.pid << "\r\n";
 
 	const scan_cfg cfg =
@@ -32,6 +32,6 @@ int main()
 		//"ntdll.dll"
 	};
 
-	for (const auto& [loc] : scanner::scan(a, "\x48\x83\x79\x00\x00\x75\x09\x33\xC9\x48\xFF\x25\x00\x00\x00\x00\x48\x8B\x09\x48\xFF\x25\x00\x00\x00\x00", "xxx??xxxxxxx????xxxxxx????"))
-		std::printf("Found at: %02llX", loc);
+	for (const auto& [loc] : scanner::scan(a, "\xE8\xFF\xFF\xFF\xFF\x83\xC0\x14\xC3", "x????xxxx"))
+		std::printf("Found at: %02llX", util::rebase(a, loc));
 }

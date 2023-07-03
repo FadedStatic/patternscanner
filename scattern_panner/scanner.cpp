@@ -263,6 +263,7 @@ std::vector<scan_result> scanner::string_scan(const process& proc, const std::st
 		std::cout << "not found.\r\n";
 		return str_results; // No need to alloc for ret vector
 	}
+
 	const auto str_loc_endianized = [str_results, n_result, proc]
 	{
 		std::string ret;
@@ -274,6 +275,7 @@ std::vector<scan_result> scanner::string_scan(const process& proc, const std::st
 		}
 		return ret;
 	}();
+
 	for (const auto& i : str_loc_endianized)
 		std::printf("%02X", i);
 

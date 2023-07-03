@@ -22,20 +22,17 @@
 
 #include "scanner.hpp"
 
+
 int main()
 {
-	auto a = process("Windows10Universal.exe");
-	std::cout << a.pid << "\r\n";
+	auto a = process("victim_app.exe");
 
 	const scan_cfg cfg =
 	{
 		//"ntdll.dll"
 	};
-	// \x74\x6F\x6F\x20\x6D\x61\x6E\x79\x20\x63\x61\x70\x74\x75\x72\x65\x73
-	// xxxxxxxxxxxxxxxxx
-	for (const auto& [loc] : scanner::scan(a, "\x74\x6F\x6F\x20\x6D\x61\x6E\x79\x20\x63\x61\x70\x74\x75\x72\x65\x73", "xxxxxxxxxxx???xxx"))
-		std::printf("Found sig at: %02llX\n", util::rebase(a, loc));
-
-	for (const auto& [loc] : scanner::string_scan(a, "too many captures"))
+	// Finding nemo.
+	// xxxxxxxxxxxxx
+	for (const auto& [loc] : scanner::scan(a, "Finding nemo.", "xxxxxxxxxxxxx"))
 		std::printf("Found sig at: %02llX\n", util::rebase(a, loc));
 }

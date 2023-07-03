@@ -259,26 +259,13 @@ std::vector<scan_result> scanner::string_scan(const process& proc, const std::st
 	// Begin by scanning for the string
 	const auto str_results = scanner::scan(proc, str, std::string("x", str.length()), config);
 	if (str_results.empty())
-	{
-		std::cout << "not found.\r\n";
 		return str_results; // No need to alloc for ret vector
-	}
 
 	const auto str_loc_endianized = [str_results, n_result, proc]
 	{
-		std::string ret;
-		auto result_needed = str_results[n_result].loc;
-		for (auto i = 0ull; i < (proc.is32 ? 4 : 8); i++)
-		{
-			ret.push_back(static_cast<uint8_t>(result_needed & 0xFF));
-			result_needed >>= 8;
-		}
-		return ret;
+		// leaving this alone for now while I collect my thoughts CALMLY.
+		return ""; // dont error for now
 	}();
-
-	for (const auto& i : str_loc_endianized)
-		std::printf("%02X", i);
-
 
 	return scan(proc, "strscan", "xxxxxxx", { config.module_scanned, config.page_flag_check, config.min_page_size, config.max_page_size, scanner_cfg_templates::string_xref_scan_internal_default, scanner_cfg_templates::string_xref_scan_external_default }, { str_loc_endianized });
 }

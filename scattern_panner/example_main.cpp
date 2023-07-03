@@ -33,6 +33,6 @@ int main()
 	};
 	// too many captures
 	// xxxxxxxxxxxxxxxxx
-	for (const auto& [loc] : scanner::scan(a, "too many captures", "xxxxxxxxxxxxxxxxx"))
+	for (const auto& [loc] : scanner::string_scan(a, "too many captures"))
 		std::printf("Found sig at: %02llX\n", util::rebase(a, loc));
 }

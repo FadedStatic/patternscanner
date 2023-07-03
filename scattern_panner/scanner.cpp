@@ -93,7 +93,7 @@ process::process(const std::string_view process_name)
 	throw std::runtime_error("Process not found.");
 }
 
-std::vector<scan_result> scanner::scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config)
+std::vector<scan_result> scanner::scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config, const scanner_optargs& opt_args)
 {
 #if SET_PRIORITY_OPTIMIZATION == true
 	const auto old_priority = GetPriorityClass(GetCurrentProcess());
@@ -192,7 +192,7 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 
 		if (config.page_flag_check(mbi.Protect))
 		{
-			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external),(scanner_args{ std::ref(proc), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, std::ref(ret_lock), std::ref(ret), std::ref(aob), std::ref(mask) }));
+			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external),scanner_args{ std::ref(proc), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, std::ref(ret_lock), std::ref(ret), std::ref(aob), std::ref(mask), std::ref(opt_args)});
 			thread_list.push_back(std::move(analyze_page));
 		}
 
@@ -216,7 +216,7 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 
 void scanner_cfg_templates::aob_scan_routine_external_default(const scanner_args& args)
 {
-	const auto [proc, start, end, return_vector_mutex, return_vector, aob, mask] = args;
+	const auto [proc, start, end, return_vector_mutex, return_vector, aob, mask, ignore1] = args;
 	const auto page_size = end - start;
 	std::size_t n_read;
 	std::vector<std::uint8_t> page_memory(page_size);
@@ -253,3 +253,41 @@ void scanner_cfg_templates::aob_scan_routine_internal_default(const scanner_args
 {
 	return;
 }
+
+std::vector<scan_result> scanner::string_scan(const process& proc, const std::string_view str, const scan_cfg& config, const std::uintptr_t n_result)
+{
+	// Begin by scanning for the string
+	const auto str_results = scanner::scan(proc, str, std::string("x", str.length()), config);
+	if (str_results.empty())
+	{
+		std::cout << "not found.\r\n";
+		return str_results; // No need to alloc for ret vector
+	}
+	const auto str_loc_endianized = [str_results, n_result, proc]
+	{
+		std::string ret;
+		auto result_needed = str_results[n_result].loc;
+		for (auto i = 0ull; i < (proc.is32 ? 4 : 8); i++)
+		{
+			ret.push_back(static_cast<uint8_t>(result_needed & 0xFF));
+			result_needed >>= 8;
+		}
+		return ret;
+	}();
+	for (const auto& i : str_loc_endianized)
+		std::printf("%02X", i);
+
+
+	return scan(proc, "strscan", "xxxxxxx", { config.module_scanned, config.page_flag_check, config.min_page_size, config.max_page_size, scanner_cfg_templates::string_xref_scan_internal_default, scanner_cfg_templates::string_xref_scan_external_default }, { str_loc_endianized });
+}
+
+void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args& args)
+{
+	return;
+}
+
+void scanner_cfg_templates::string_xref_scan_internal_default(const scanner_args& args)
+{
+	return;
+}
+

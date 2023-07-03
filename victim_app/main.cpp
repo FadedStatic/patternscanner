@@ -21,17 +21,31 @@
  */
 
 #include <iostream>
+#include <Psapi.h>
 #include <Windows.h>
 #include <string_view>
+#include <vector>
+#include <Windows.h>
+
+auto finding_nemo = "Finding nemo.";
 
 __declspec(noinline) std::uintptr_t get_module_base_address(const std::string_view str)
 {
 	return reinterpret_cast<std::uintptr_t>(str.empty() ? GetModuleHandleA(nullptr) : GetModuleHandleA(str.data()));
 }
 
+__declspec(noinline) std::string SCAN_FOR_ME()
+{
+	auto retn_string = std::string();
+	for (auto c : finding_nemo)
+		retn_string.push_back(c);
+
+	return retn_string;
+}
+
 int main()
 {
 	SetConsoleTitleA("Pattern Scanner Testing Application");
-	std::printf("Program Base Address: %02llX\nntdll.dll Base: %02llX\n", get_module_base_address(""), get_module_base_address("ntdll.dll"));
+	std::printf("Program Base Address: %02llX\nntdll.dll Base: %02llX\nAddress of str: %02llX\n", get_module_base_address(""), get_module_base_address("ntdll.dll"), reinterpret_cast<std::uintptr_t>(&finding_nemo) - get_module_base_address(""));
 	std::cin.get();
 }

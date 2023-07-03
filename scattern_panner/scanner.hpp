@@ -57,6 +57,19 @@ struct process
 	explicit process(const std::string_view process_name);
 };
 
+// INSTRUCTIONS FOR ADDING CUSTOM ARGUMENTS!
+// This struct will be UNTOUCHED by the scan function, and it is up to you to add whatever relevant information is required to this.
+// Now, when you add an argument or something it's not that important, you WILL have to compile the source as any linked libraries will contain a different definition of scanner_args, but no additional modifications will have to be made.
+// If you are to add an argument, please do it at the bottom-most variable, as it will not break any structured binding in the methods.
+struct scanner_optargs
+{
+	// This is where the optional args go in.
+	const std::string_view xref_trace_endianized; // This is the offset we are looking for in scanning, it's endianized.
+
+	// ADD PAST THIS LINE!
+};
+
+// Expr suggested making this a struct, so I did just that.
 struct scanner_args
 {
 	const process& proc;
@@ -66,7 +79,9 @@ struct scanner_args
 	std::vector<scan_result>& return_vector;
 	const std::string_view aob;
 	const std::string_view mask;
+	scanner_optargs opt_args;
 };
+
 namespace scanner_cfg_templates
 {
 	// This is an example, you can either make this a function or a variable containing lambda or std::function.
@@ -79,7 +94,9 @@ namespace scanner_cfg_templates
 
 	// Reference the cpp file for more information about this.
 	void aob_scan_routine_internal_default(const scanner_args& args),
-		 aob_scan_routine_external_default(const scanner_args& args);
+		 aob_scan_routine_external_default(const scanner_args& args),
+		 string_xref_scan_internal_default(const scanner_args& args),
+		 string_xref_scan_external_default(const scanner_args& args);
 }
 
 // Struct for configuring scans.
@@ -92,7 +109,7 @@ struct scan_cfg
 	std::function<bool(const std::uintptr_t)> page_flag_check = scanner_cfg_templates::page_flag_check_default;
 
 	// Minimum and Maximum page size (in bytes)
-	std::uintptr_t min_page_size = 0ull, max_page_size = ~0ull; // credits to Fishy for the suggestion using bit not instead of 0xFFFFFFFFFFFFFFFF
+	std::uintptr_t min_page_size = 0ull, max_page_size = ~0ull; // credits to Fishy for the suggestion using bit not instead of 0xFFFFFFFFFFFFFFF
 
 	// Change these dependent on the scan function.
 	// By default, this is AOB scanning.
@@ -103,7 +120,14 @@ struct scan_cfg
 namespace scanner
 {
 	// The format should be "\xED\xEF\x0E", "??x"
-	std::vector<scan_result> scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config = {});
+	std::vector<scan_result> scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config = {}, const scanner_optargs& opt_args = {});
+
+	// BELOW THIS LINE YOU CANNOT CHANGE scan_routine_internal and scan_routine_external, doesnt matter if you do we ignore it anyways.
+
+	// This is for scanning string xrefs, so if you had a string such as "we are mcdonalds gaming", it would get all xrefs of that string.
+	// Null terminator is not important, if you are missing it it will find it anyways.
+	// n_result is the number result of the scan we are targeting.
+	std::vector<scan_result> string_scan(const process& proc, const std::string_view str, const scan_cfg& config = {}, const std::uintptr_t n_result = 0);
 }
 
 namespace util
@@ -111,6 +135,6 @@ namespace util
 	template <typename T> requires std::is_integral_v<T>
 	T rebase(const process& proc, const T address, const T new_base = 0)
 	{
-		return address - proc.proc_base + new_base;
+		return address - static_cast<T>(proc.proc_base) + new_base;
 	}
 }

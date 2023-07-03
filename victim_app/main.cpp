@@ -21,7 +21,6 @@
  */
 
 #include <iostream>
-#include <Psapi.h>
 #include <Windows.h>
 #include <string_view>
 #include <vector>
@@ -37,7 +36,7 @@ __declspec(noinline) std::uintptr_t get_module_base_address(const std::string_vi
 __declspec(noinline) std::string SCAN_FOR_ME()
 {
 	auto retn_string = std::string();
-	for (auto c : finding_nemo)
+	for (auto c : std::string(finding_nemo))
 		retn_string.push_back(c);
 
 	return retn_string;

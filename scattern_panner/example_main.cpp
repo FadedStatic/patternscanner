@@ -25,14 +25,14 @@
 
 int main()
 {
-	auto a = process("victim_app.exe");
+	auto a = process("Windows10Universal.exe");
 
 	const scan_cfg cfg =
 	{
 		//"ntdll.dll"
 	};
-	// Finding nemo.
-	// xxxxxxxxxxxxx
-	for (const auto& [loc] : scanner::scan(a, "Finding nemo.", "xxxxxxxxxxxxx"))
+	// too many captures
+	// xxxxxxxxxxxxxxxxx
+	for (const auto& [loc] : scanner::scan(a, "too many captures", "xxxxxxxxxxxxxxxxx"))
 		std::printf("Found sig at: %02llX\n", util::rebase(a, loc));
 }

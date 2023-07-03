@@ -174,7 +174,7 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	{
 		MODULEINFO mod_info;
 		if (K32GetModuleInformation(proc.curr_proc, mod_found, &mod_info, sizeof(mod_info)))
-			return scan_base_address + reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
+			return scan_base_address + static_cast<std::uintptr_t>(mod_info.SizeOfImage);
 
 		throw std::runtime_error("Error getting end address from module in GetModuleInformation. Call GetLastError for more information. Type 2.");
 	}();

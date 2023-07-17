@@ -33,6 +33,16 @@ int main()
 	};
 	// too many captures
 	// xxxxxxxxxxxxxxxxx
-	for (const auto& [loc] : scanner::string_scan(a, "too many captures"))
-		std::printf("Found sig at: %02llX\n", util::rebase(a, loc));
+
+	const auto scan_loc = scanner::string_scan(a, "too many captures")[0].loc;
+
+	const auto start_time = std::chrono::high_resolution_clock::now();
+
+	const auto push_captures = util::get_prologue(a, scan_loc);
+	const auto push_captures_calls = util::get_calls(a, push_captures);
+	const auto end_time = std::chrono::high_resolution_clock::now();
+	std::printf("Time taken: %lldms\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
+
+	for (const auto& [c] : push_captures_calls)
+		std::printf("Found sig at: %02llX\nRebased: %02llX\n", c, util::rebase(a, c));
 }

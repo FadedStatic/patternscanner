@@ -1,4 +1,4 @@
-/*
+/* 
  * Copyright 2023 FadedStatic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -32,7 +32,7 @@
 #include <thread>
 
 // This part will be using preprocessor macros so that performance profiling isnt compiled by default, this way we save a negligible amount of CPU time
-#define PERFORMANCE_PROFILING_MODE true // true = true, false = false
+#define PERFORMANCE_PROFILING_MODE false // true = true, false = false
 // False by default, this will set the priority of the process for better use of resources (faster scanning), this is advised for external applications but not for internal, as it could be detected easily.
 // Also note, this will set the priority back to the old priority when we are done with scanning.
 #define SET_PRIORITY_OPTIMIZATION true 
@@ -137,4 +137,12 @@ namespace util
 	{
 		return address - static_cast<T>(proc.proc_base) + new_base;
 	}
+
+	std::vector<scan_result> get_calls(const process& proc, const std::uintptr_t func);
+	std::vector<scan_result> get_jumps(const process& proc, const std::uintptr_t func);
+	std::uintptr_t get_prologue(const process& proc, const std::uintptr_t func);
+	// all_alignment pretty much means that all bytes after ret must be 0x90 or 0xC3 until the next prologue in order for a match to occur.
+	// min_alignment is the amount of alignment that is required for a match to occur, so if you know that your epilogue will have x amount of alignment bytes, then this helps increase speed tremendously.
+	std::uintptr_t get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment=true, const std::uint32_t min_alignment = 0);
+	std::uintptr_t resolve_relative(const std::uintptr_t func, const std::uintptr_t loc);
 }

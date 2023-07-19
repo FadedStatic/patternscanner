@@ -576,7 +576,6 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 	}
 }
 
-
 std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr_t func)
 {
 	MEMORY_BASIC_INFORMATION mbi;
@@ -634,8 +633,6 @@ std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr
 	
 	return scan_results;
 }
-
-
 
 std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr_t func, const bool functions_only, const bool include_twobyte_jmps)
 {

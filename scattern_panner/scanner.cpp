@@ -297,7 +297,6 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 
 	for (auto i = 0ull; i < page_memory.size(); i++)
 	{
-		
 		switch (page_memory[i])
 		{
 		case 0xB9: // mov ecx, offset loc_01020304 -> B9 04 03 02 01
@@ -332,6 +331,96 @@ void scanner_cfg_templates::string_xref_scan_internal_default(const scanner_args
 {
 	return;
 }
+
+std::vector<scan_result> scanner::xref_scan(const process& proc, const std::uintptr_t func, const scan_cfg& config, const bool include_twobyte)
+{
+	return scan(
+		proc, 
+		"xrefscan", 
+		"xxxxxxxx", 
+		
+		{
+			config.module_scanned,
+			config.page_flag_check,
+			config.min_page_size,
+			config.max_page_size,
+			scanner_cfg_templates::function_xref_scan_internal_default,
+			scanner_cfg_templates::function_xref_scan_external_default
+		},
+
+		{
+			[func, proc]
+			{
+				std::vector<std::uint8_t> bytes_extracted(proc.is32 ? 4 : 8);
+
+				const auto loc_32 = static_cast<std::uint32_t>(func);
+				const auto loc_64 = func;
+
+				if (proc.is32)
+					std::memcpy(bytes_extracted.data(), &loc_32, 4);
+				else
+					std::memcpy(bytes_extracted.data(), &loc_64, 8);
+
+				std::string retnvec;
+				for (const auto& thing : bytes_extracted)
+					retnvec.push_back(static_cast<const char>(thing));
+				
+				return retnvec;
+			}()
+		});
+}
+
+// Pretty much the same as string scanning routine.
+void scanner_cfg_templates::function_xref_scan_external_default(const scanner_args& args)
+{
+	const auto& [proc, start, end, return_vector_mutex, return_vector, aob, mask, optargs] = args;
+	const auto xref_trace = optargs.xref_trace_endianized;
+	const auto page_size = end - start;
+	std::size_t n_read;
+	std::vector<std::uint8_t> page_memory(page_size);
+
+	// Chunking, instead of locking the mutex (very slow) just do it when we're done.
+	std::vector<scan_result> local_results;
+
+	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, &n_read);
+	const std::uintptr_t xref_trace_int = proc.is32 ? (xref_trace[3] | xref_trace[2] << 8 | xref_trace[1] << 16 | xref_trace[0] << 24) : 0ull;
+	std::printf("%02llX\n", xref_trace_int);
+	for (auto i = 0ull; i < page_memory.size(); i++)
+	{
+		switch (page_memory[i])
+		{
+			// RELATIVE
+		case 0xE8: // CALL Jz
+			if ((proc.is32 ? i + start + 5 + (page_memory[i + 1] | page_memory[i + 2] << 8 | page_memory[i + 3] << 16 | page_memory[i + 4] << 24) : 0ull) == xref_trace_int)
+				local_results.push_back({ start + i });
+			break;
+
+			// ABSOLUTE
+		case 0x68: // PUSH Av
+		case 0x9A: // CALL Az
+			if (proc.is32)
+				if (page_memory[i + 1] == static_cast<std::uint8_t>(xref_trace[0]) and page_memory[i + 2] == static_cast<std::uint8_t>(xref_trace[1]) and page_memory[i + 3] == static_cast<std::uint8_t>(xref_trace[2]) and page_memory[i + 4] == static_cast<std::uint8_t>(xref_trace[3]))
+					local_results.push_back({ start + i });
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (!local_results.empty())
+	{
+		return_vector_mutex.lock();
+		for (const auto& c : local_results)
+			return_vector.push_back(c);
+		return_vector_mutex.unlock();
+	}
+}
+
+void scanner_cfg_templates::function_xref_scan_internal_default(const scanner_args& args)
+{
+	return;
+}
+
 
 std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func)
 {
@@ -407,12 +496,37 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 						goto out_of_bounds;
 					}
 
+					if (!remaining)
+					{
+						switch (page_memory[loc+1])
+						{
+						case 0x53:
+							if (proc.is32)
+								if (!((page_memory[loc + 2] == 0x8B and ((page_memory[loc + 3] == 0xDC) or (page_memory[loc + 3] == 0xD9))) or (page_memory[loc + 2] == 0x56 and page_memory[loc + 3] == 0x8B and page_memory[loc + 4] == 0xD9)))
+									goto out_of_bounds;
+							break;
+
+						case 0x55:
+							if (proc.is32)
+								if (!(page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC))
+									goto out_of_bounds;
+						default:
+							goto out_of_bounds;
+							break;
+						}
+					}
+
 					return func + loc + remaining;
 
+					// pretty much although they say DONT DO THIS, it's basically just going to jmp to this part of the branch instead of jz at the end, it's like a tiny optimization
 					out_of_bounds:
 					continue;
+				default:
+					break;
 				}
-				continue;
+				break;
+
+				// Padding check, 0xCC for MSVC 0x90 for CLANG
 			case 0xCC:
 			case 0x90:
 				remaining = 15 - ((loc - 1) % 16);
@@ -421,12 +535,27 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 					// do we want to check all alignment bytes?
 					for (auto finding = loc; finding < (all_alignment ? loc + remaining : loc + min_alignment); finding++)
 					{
-						if (page_memory[finding] == 0xCC or page_memory[finding] == 0x90)
-						{
-							continue;
-						}
+						if (page_memory[finding] != 0xCC and page_memory[finding] != 0x90)
+							goto out_of_bounds_2;
+					}
 
-						goto out_of_bounds_2;
+					if(remaining == 1)
+					{
+						switch (page_memory[loc + 1])
+						{
+						case 0x53:
+							if (proc.is32)
+								if (!((page_memory[loc + 2] == 0x8B and ((page_memory[loc + 3] == 0xDC) or (page_memory[loc + 3] == 0xD9))) or (page_memory[loc + 2] == 0x56 and page_memory[loc + 3] == 0x8B and page_memory[loc + 4] == 0xD9)))
+									goto out_of_bounds_2;
+							break;
+
+						case 0x55:
+							if (proc.is32)
+								if (!(page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC))
+									goto out_of_bounds_2;
+						default:
+							goto out_of_bounds_2;
+						}
 					}
 
 					return func + loc - 1;
@@ -473,13 +602,24 @@ std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr
 		{
 			switch (page_memory[loc])
 			{
-			case 0xE8:
+			case 0x9A: // CALL Az
+				if (proc.is32)
+				{
+					rel_loc = page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24;
+					if (rel_loc % 16 == 0)
+						scan_results.push_back({ rel_loc });
+				}
+				break;
+			case 0xE8: // CALL Jz
 				if (proc.is32)
 				{
 					rel_loc = loc + func_base + 5 + (page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24);
 					if (rel_loc % 16 == 0)
 						scan_results.push_back({ rel_loc });
 				}
+
+			default:
+				break;
 			}
 		}
 	}
@@ -488,12 +628,15 @@ std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr
 		VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
 	}
 
+	if (proc.is32)
+		std::erase_if(scan_results, [](const scan_result result) { return result.loc > 0xFFFFFFFF;  });
+	
 	return scan_results;
 }
 
 
 
-std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr_t func)
+std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr_t func, const bool functions_only, const bool include_twobyte_jmps)
 {
 	MEMORY_BASIC_INFORMATION mbi;
 	auto func_base = func;
@@ -515,24 +658,64 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(func_base), page_memory.data(), func_sz, &n_read);
 
 		std::uintptr_t rel_loc{0};
+
+		// So pretty much without a disassembler we're out of luck. 
+		// Adding distinguishment between random data and a jmp (especially twobyte) is going to require thorough analysis which isn't really ideal in this situation.
+		// I'll do something about this later, but for now just make sure to account for a potential error (random data)
 		for (auto loc = 0ull; loc < func_sz; loc++)
 		{
 			switch (page_memory[loc])
 			{
-			case 0xE9:
+			case 0xE9: // JMP Jz
 				if (proc.is32)
 				{
 					rel_loc = loc + func_base + 5 + (page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24);
-					if (rel_loc % 16 == 0)
-						scan_results.push_back({ rel_loc });
+					if (functions_only and (rel_loc % 16 != 0))
+						break;
+
+					scan_results.push_back({ rel_loc });
 				}
 				break;
-				case 0x
-			case 0x74:
+			case 0xEA: // JMP Ap
 				if (proc.is32)
-					scan_results.push_back({ func_base + loc + 2 + page_memory[loc + 1] });
+				{
+					rel_loc = page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24;
+					if (functions_only and (rel_loc % 16 != 0))
+						break;
+
+					scan_results.push_back({ rel_loc });
+				}
 				break;
 
+			case 0xEB: // JMP Jb
+			case 0x70: // JO Jb
+			case 0x71: // JNO Jb
+			case 0x72: // JB Jb
+			case 0x73: // JNB Jb
+			case 0x74: // JZ Jb
+			case 0x75: // JNZ Jb
+			case 0x76: // JBE Jb
+			case 0x77: // JA Jb
+			case 0x78: // JS Jb
+			case 0x79: // JNS Jb
+			case 0x7A: // JP Jb
+			case 0x7B: // JNP Jb
+			case 0x7C: // JL Jb
+			case 0x7D: // JNL Jb
+			case 0x7E: // JLE Jb
+			case 0x7F: // JNLE Jb
+				if (include_twobyte_jmps)
+				{
+					rel_loc = func_base + loc + 2 + page_memory[loc + 1];
+					if (functions_only and (rel_loc % 16 != 0))
+						break;
+
+					scan_results.push_back({ rel_loc });
+				}
+				break;
+
+			default:
+				break;
 			}
 		}
 	}

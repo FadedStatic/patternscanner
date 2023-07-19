@@ -42,7 +42,7 @@ __declspec(noinline) std::string SCAN_FOR_ME()
 	return retn_string;
 }
 
-int main()
+int mainer()
 {
 	SetConsoleTitleA("Pattern Scanner Testing Application");
 	const auto str = SCAN_FOR_ME();

@@ -34,15 +34,82 @@ int main()
 	// too many captures
 	// xxxxxxxxxxxxxxxxx
 
-	const auto scan_loc = scanner::string_scan(a, "too many captures")[0].loc;
+	/*
+	 *const auto start_time = std::chrono::high_resolution_clock::now();
 
-	const auto start_time = std::chrono::high_resolution_clock::now();
+	const auto tmc = EyeStep::scanner::scan_xrefs("too many captures")[0];
 
-	const auto push_captures = util::get_prologue(a, scan_loc);
-	const auto push_captures_calls = util::get_calls(a, push_captures);
+	const auto push_captures = EyeStep::util::getPrologue(tmc);
+
+	const auto push_captures_calls = EyeStep::util::getCalls(push_captures);
+
+	ret.push_back({ "push_captures", EyeStep::util::raslr(push_captures) });
+
+	ret.push_back({ "lua_checkstack", EyeStep::util::raslr(push_captures_calls[0])});
+	const auto luaL_error = push_captures_calls[2];
+	ret.push_back({ "luaL_error", EyeStep::util::raslr(luaL_error) });
+	ret.push_back({ "push_onecapture", EyeStep::util::raslr(push_captures_calls[1]) });
+	const auto luaL_error_calls = EyeStep::util::getCalls(luaL_error);
+
 	const auto end_time = std::chrono::high_resolution_clock::now();
 	std::printf("Time taken: %lldms\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
 
-	for (const auto& [c] : push_captures_calls)
-		std::printf("Found sig at: %02llX\nRebased: %02llX\n", c, util::rebase(a, c));
+	for (const auto& c : luaL_error_calls)
+		std::printf("%02X\n", EyeStep::util::raslr(c));
+	 *
+	 *
+	 */
+	/*
+	155E370
+	155D9A0
+	15AD910
+	15DEBE0
+	15E0860
+	156FC40
+	15DEBE0
+	15DEBE0
+	15E9A50
+	15E9840
+	15E9A50
+	15E9950
+	15E9B00
+	15E80D0
+	1570390
+	156CF40
+	15E9810
+
+155E370
+155D9A0
+15AD910
+15DEBE0
+15E0860
+156FC40
+15DEBE0
+15DEBE0
+15E9A50
+15E9840
+15E9A50
+EA55F3E0
+15E9950
+15E9B00
+15E80D0
+155DEC0
+1570390
+156CF40
+15E9810
+	 */
+	const auto start_time = std::chrono::high_resolution_clock::now();
+
+	const auto scan_loc = scanner::string_scan(a, "too many captures")[0].loc;
+
+	const auto push_captures = util::get_prologue(a, scan_loc);
+	const auto push_captures_calls = util::get_calls(a, push_captures);
+
+	const auto luaL_error = push_captures_calls[2].loc;
+	const auto luaL_error_calls = util::get_calls(a, luaL_error);
+	// 	ret.push_back({ "str_find_aux", EyeStep::util::raslr(EyeStep::util::getPrologue(EyeStep::scanner::scan_xrefs(push_captures)[1]))});
+
+	const auto str_find_aux = scanner::xref_scan(a, push_captures);
+	const auto end_time = std::chrono::high_resolution_clock::now();
+	std::printf("Time taken: %lldms\nLoc: %llX\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count(), str_find_aux.size());
 }

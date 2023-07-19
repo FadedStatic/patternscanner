@@ -94,9 +94,11 @@ namespace scanner_cfg_templates
 
 	// Reference the cpp file for more information about this.
 	void aob_scan_routine_internal_default(const scanner_args& args),
-		 aob_scan_routine_external_default(const scanner_args& args),
-		 string_xref_scan_internal_default(const scanner_args& args),
-		 string_xref_scan_external_default(const scanner_args& args);
+		aob_scan_routine_external_default(const scanner_args& args),
+		string_xref_scan_internal_default(const scanner_args& args),
+		string_xref_scan_external_default(const scanner_args& args),
+		function_xref_scan_internal_default(const scanner_args& args),
+		function_xref_scan_external_default(const scanner_args& args);
 }
 
 // Struct for configuring scans.
@@ -128,6 +130,11 @@ namespace scanner
 	// Null terminator is not important, if you are missing it it will find it anyways.
 	// n_result is the number result of the scan we are targeting.
 	std::vector<scan_result> string_scan(const process& proc, const std::string_view str, const scan_cfg& config = {}, const std::uintptr_t n_result = 0);
+
+	// WARNING:
+	// scanning include_twobyte can make it VERY SLOW!
+	// it IS NOT ADVISED that you set this to true.
+	std::vector<scan_result> xref_scan(const process& proc, const std::uintptr_t func, const scan_cfg& config = {}, const bool include_twobyte = false);
 }
 
 namespace util
@@ -139,10 +146,14 @@ namespace util
 	}
 
 	std::vector<scan_result> get_calls(const process& proc, const std::uintptr_t func);
-	std::vector<scan_result> get_jumps(const process& proc, const std::uintptr_t func);
+
+	// functions_only basically means that the JMPs do not count branches, only functions. if you're expecting only jmps to functions then use this, otherwise if scanning for branches do not use functions_only
+	// include_twobyte_jmps is whether or not you want to include jumps such as: JNE Jb
+	std::vector<scan_result> get_jumps(const process& proc, const std::uintptr_t func, const bool functions_only=true, const bool include_twobyte_jmps=false);
+
 	std::uintptr_t get_prologue(const process& proc, const std::uintptr_t func);
+
 	// all_alignment pretty much means that all bytes after ret must be 0x90 or 0xC3 until the next prologue in order for a match to occur.
 	// min_alignment is the amount of alignment that is required for a match to occur, so if you know that your epilogue will have x amount of alignment bytes, then this helps increase speed tremendously.
 	std::uintptr_t get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment=true, const std::uint32_t min_alignment = 0);
-	std::uintptr_t resolve_relative(const std::uintptr_t func, const std::uintptr_t loc);
 }

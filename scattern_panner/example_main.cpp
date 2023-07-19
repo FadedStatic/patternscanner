@@ -109,7 +109,7 @@ EA55F3E0
 	const auto luaL_error_calls = util::get_calls(a, luaL_error);
 	// 	ret.push_back({ "str_find_aux", EyeStep::util::raslr(EyeStep::util::getPrologue(EyeStep::scanner::scan_xrefs(push_captures)[1]))});
 
-	const auto str_find_aux = scanner::xref_scan(a, push_captures);
+	const auto str_find_aux = util::get_prologue(a, scanner::xref_scan(a, push_captures)[1].loc);
 	const auto end_time = std::chrono::high_resolution_clock::now();
-	std::printf("Time taken: %lldms\nLoc: %llX\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count(), str_find_aux.size());
+	std::printf("Time taken: %lldms\nLoc: %llX\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count(), util::rebase(a, str_find_aux));
 }

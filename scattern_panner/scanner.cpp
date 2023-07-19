@@ -366,7 +366,8 @@ std::vector<scan_result> scanner::xref_scan(const process& proc, const std::uint
 					retnvec.push_back(static_cast<const char>(thing));
 				
 				return retnvec;
-			}()
+			}(),
+			func
 		});
 }
 
@@ -383,15 +384,15 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 	std::vector<scan_result> local_results;
 
 	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, &n_read);
-	const std::uintptr_t xref_trace_int = proc.is32 ? (xref_trace[3] | xref_trace[2] << 8 | xref_trace[1] << 16 | xref_trace[0] << 24) : 0ull;
-	std::printf("%02llX\n", xref_trace_int);
+
 	for (auto i = 0ull; i < page_memory.size(); i++)
 	{
 		switch (page_memory[i])
 		{
 			// RELATIVE
 		case 0xE8: // CALL Jz
-			if ((proc.is32 ? i + start + 5 + (page_memory[i + 1] | page_memory[i + 2] << 8 | page_memory[i + 3] << 16 | page_memory[i + 4] << 24) : 0ull) == xref_trace_int)
+
+			if ((proc.is32 ? i + start + 5 + (page_memory[i + 1] | page_memory[i + 2] << 8 | page_memory[i + 3] << 16 | page_memory[i + 4] << 24) : 0ull) == optargs.xref_trace_int)
 				local_results.push_back({ start + i });
 			break;
 

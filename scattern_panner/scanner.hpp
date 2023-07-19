@@ -65,7 +65,7 @@ struct scanner_optargs
 {
 	// This is where the optional args go in.
 	const std::string_view xref_trace_endianized; // This is the offset we are looking for in scanning, it's endianized.
-
+	const std::uintptr_t xref_trace_int;
 	// ADD PAST THIS LINE!
 };
 

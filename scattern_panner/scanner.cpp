@@ -212,7 +212,6 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	const auto end_time = std::chrono::high_resolution_clock::now();
 	std::printf("Time taken: %lldms\n", std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count());
 #endif
-
 	return ret;
 }
 
@@ -256,7 +255,7 @@ void scanner_cfg_templates::aob_scan_routine_internal_default(const scanner_args
 std::vector<scan_result> scanner::string_scan(const process& proc, const std::string_view str, const scan_cfg& config, const std::uintptr_t n_result)
 {
 	// Begin by scanning for the string
-	const auto str_results = scanner::scan(proc, str, std::string("x", str.length()), config);
+	const auto str_results = scanner::scan(proc, str, std::string("x", str.length()+1), config); // fixed null terminator scan result issue.
 	if (str_results.empty())
 		return str_results; // No need to alloc for ret vector
 
@@ -377,6 +376,7 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 	const auto& [proc, start, end, return_vector_mutex, return_vector, aob, mask, optargs] = args;
 	const auto xref_trace = optargs.xref_trace_endianized;
 	const auto page_size = end - start;
+
 	std::size_t n_read;
 	std::vector<std::uint8_t> page_memory(page_size);
 
@@ -392,7 +392,7 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 			// RELATIVE
 		case 0xE8: // CALL Jz
 
-			if ((proc.is32 ? i + start + 5 + (page_memory[i + 1] | page_memory[i + 2] << 8 | page_memory[i + 3] << 16 | page_memory[i + 4] << 24) : 0ull) == optargs.xref_trace_int)
+			if ((proc.is32 ? i + start + 5 + (page_memory[i + 1] | page_memory[i + 2] << 8 | page_memory[i + 3] << 16 | page_memory[i + 4] << 24) : 0ll) == optargs.xref_trace_int)
 				local_results.push_back({ start + i });
 			break;
 
@@ -436,7 +436,6 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 		std::vector<std::uint8_t> page_memory(page_size);
 		const auto base_address = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
 		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(base_address), page_memory.data(), page_size - (func - base_address), &n_read);
-
 		// Instead of checking for alignment we're going to align this mf from the start.
 		for (auto loc = (func - (func % 16)) - base_address; loc > 0; loc -= 16)
 		{
@@ -457,7 +456,8 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 			}
 		}
 
-		return 0;
+		// blanket fix for functions between two pages.
+		return get_prologue(proc, func - 512);
 	}
 	else
 	{
@@ -540,7 +540,7 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 							goto out_of_bounds_2;
 					}
 
-					if(remaining == 1)
+					if(remaining == 1 or !remaining)
 					{
 						switch (page_memory[loc + 1])
 						{

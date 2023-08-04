@@ -451,6 +451,10 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 				if (proc.is32)
 					if (page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC)
 						return base_address + loc;
+			case 0x56:
+				if (proc.is32)
+					if (page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xF1)
+						return base_address + loc;
 			default:
 				break;
 			}

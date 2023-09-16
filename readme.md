@@ -2,7 +2,7 @@
 ## Description
 PatternScanner is a project that is provided free of charge to any and all users.\
 This scanner was designed to be blazingly fast, and to target x86_64 projects.\
-x86 is not supported officially, but I will add macros which will compile different versions of the project dependent on build settings.
+x64 is not supported officially, but I will add macros which will compile different versions of the project dependent on build settings.
 
 ## Images
 There are no images at the moment, but I will post some with benchmarks. Also, any benchmark binaries I use will be in the solution by default.

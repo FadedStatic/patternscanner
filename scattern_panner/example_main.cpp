@@ -31,5 +31,18 @@ int main()
 		//"ntdll.dll"
 	};
 
-	// TODO: Add stuff here.
+	const auto opened_process = process("victim_app.exe");
+	std::printf("Process ID: %llu\nProcess base address: %02llX\nProcess is under wow64: %d\n", opened_process.pid, opened_process.proc_base, opened_process.is32);
+
+	// scan for xrefs to "BASE STRING PREFIX"
+	const auto str_results = scanner::string_scan(opened_process, "BASE STRING PREFIX");
+	for (const auto & [loc] : str_results) {
+		std::printf("String xref found at: %02llX\n", util::rebase(opened_process, loc));
+	}
+
+	const auto SCAN_FOR_ME = util::get_prologue(opened_process, str_results[0].loc);
+	std::printf("SCAN_FOR_ME: %02llX\n", util::rebase(opened_process, SCAN_FOR_ME));
+
+	std::cin.get();
+	return 0;
 }

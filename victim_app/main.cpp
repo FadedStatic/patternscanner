@@ -34,7 +34,7 @@ __declspec(noinline) std::uintptr_t get_module_base_address(const std::string_vi
 
 __declspec(noinline) std::string SCAN_FOR_ME()
 {
-	auto retn_string = std::string();
+	auto retn_string = std::string("BASE STRING PREFIX");
 	for (auto c : std::string(finding_nemo))
 		retn_string.push_back(c);
 

@@ -51,7 +51,6 @@ process::process(const std::string_view process_name)
 			if (!K32GetModuleBaseNameA(proc_handle, j, module_name.data(), MAX_PATH))
 				continue;
 
-
 			// Reason for this is that we're going to just have zeroes
 			std::erase_if(module_name, [](const char c)
 			{
@@ -255,7 +254,7 @@ void scanner_cfg_templates::aob_scan_routine_internal_default(const scanner_args
 std::vector<scan_result> scanner::string_scan(const process& proc, const std::string_view str, const scan_cfg& config, const std::uintptr_t n_result)
 {
 	// Begin by scanning for the string
-	const auto str_results = scanner::scan(proc, str, std::string("x", str.length()+1), config); // fixed null terminator scan result issue.
+	auto str_results = scanner::scan(proc, str, std::string("x", str.length()+1), config); // fixed null terminator scan result issue.
 	if (str_results.empty())
 		return str_results; // No need to alloc for ret vector
 
@@ -314,6 +313,7 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 					local_results.push_back({ start + i });
 				
 			break;
+		default:break;
 		}
 	}
 
@@ -463,11 +463,9 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 		// blanket fix for functions between two pages.
 		return get_prologue(proc, func - 512);
 	}
-	else
-	{
-		VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
-		return 0;
-	}
+
+	VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
+	return 0;
 }
 
 std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment, const std::uint32_t min_alignment)

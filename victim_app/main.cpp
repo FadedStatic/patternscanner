@@ -24,7 +24,6 @@
 #include <Windows.h>
 #include <string_view>
 #include <vector>
-#include <Windows.h>
 
 auto finding_nemo = "Finding nemo.";
 
@@ -42,7 +41,7 @@ __declspec(noinline) std::string SCAN_FOR_ME()
 	return retn_string;
 }
 
-int mainer()
+int main()
 {
 	SetConsoleTitleA("Pattern Scanner Testing Application");
 	const auto str = SCAN_FOR_ME();

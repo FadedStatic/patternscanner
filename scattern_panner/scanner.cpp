@@ -273,13 +273,13 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 		case 0xB9: // mov ecx, offset loc_01020304 -> B9 04 03 02 01
 		case 0xBA: // mov edx, offset loc_01020304 -> BA 04 03 02 01
 		case 0xB8: // mov eax, offset loc_01020304 -> B8 04 03 02 01
-		case 0x68: // push offset loc_01020304 -> 68 04 03 02 01
-			if (proc.is32 && page_memory[i + 1] == static_cast<std::uint8_t>(xref_trace[0]) and page_memory[i + 2] == static_cast<std::uint8_t>(xref_trace[1]) and page_memory[i + 3] == static_cast<std::uint8_t>(xref_trace[2]) and page_memory[i + 4] == static_cast<std::uint8_t>(xref_trace[3]))
+			case 0x68: // push offset loc_01020304 -> 68 04 03 02 01
+			if (proc.is32 && !std::memcmp(&xref_trace[0], &page_memory[i+1], 4))
 				local_results.push_back({ start + i });
 			break;
 		case 0xC7: // mov [reg + off], loc_01020304 -> C7 ? ? 04 03 02 01
 		//case 0x0F: // Twobyte, this can pessimize performance (twice as slow), so it is advised that you leave this off.
-			if (proc.is32 && page_memory[i + 3] == static_cast<std::uint8_t>(xref_trace[0]) and page_memory[i + 4] == static_cast<std::uint8_t>(xref_trace[1]) and page_memory[i + 5] == static_cast<std::uint8_t>(xref_trace[2]) and page_memory[i + 6] == static_cast<std::uint8_t>(xref_trace[3]))
+			if (proc.is32 && !std::memcmp(&xref_trace[0], &page_memory[i+3], 4))
 					local_results.push_back({ start + i });
 				
 			break;

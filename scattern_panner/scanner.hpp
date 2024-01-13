@@ -30,6 +30,7 @@
 #include <Psapi.h>
 #include <processthreadsapi.h>
 #include <thread>
+#include <array>
 
 // This part will be using preprocessor macros so that performance profiling isnt compiled by default, this way we save a negligible amount of CPU time
 #define PERFORMANCE_PROFILING_MODE false // true = true, false = false

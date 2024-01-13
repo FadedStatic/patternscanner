@@ -273,20 +273,20 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 		case 0xB9: // mov ecx, offset loc_01020304 -> B9 04 03 02 01
 		case 0xBA: // mov edx, offset loc_01020304 -> BA 04 03 02 01
 		case 0xB8: // mov eax, offset loc_01020304 -> B8 04 03 02 01
-			case 0x68: // push offset loc_01020304 -> 68 04 03 02 01
-			if (proc.is32 && !std::memcmp(&xref_trace[0], &page_memory[i+1], 4))
+		case 0x68: // push offset loc_01020304 -> 68 04 03 02 01
+			if (proc.is32 && i+5 < page_size && !std::memcmp(&xref_trace[0], &page_memory[i+1], 4))
 				local_results.push_back({ start + i });
 			break;
 		case 0xC7: // mov [reg + off], loc_01020304 -> C7 ? ? 04 03 02 01
 		//case 0x0F: // Twobyte, this can pessimize performance (twice as slow), so it is advised that you leave this off.
-			if (proc.is32 && !std::memcmp(&xref_trace[0], &page_memory[i+3], 4))
+			if (proc.is32 && i+7 < page_size && !std::memcmp(&xref_trace[0], &page_memory[i+3], 4))
 					local_results.push_back({ start + i });
 				
 			break;
 
 		// RELATIVE
 		case 0x48: // LEA Gv M
-			if (i + start + 7 + (page_memory[i + 3] | page_memory[i + 4] << 8 | page_memory[i + 5] << 16 | page_memory[i + 6] << 24) == optargs.xref_trace_int)
+			if (!proc.is32 && i+7 < page_size && i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[i+3]) == optargs.xref_trace_int)
 				local_results.push_back({ start + i });
 		break;
 
@@ -358,14 +358,14 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 		switch (page_memory[i]) {
 		// RELATIVE
 			case 0xE8: // CALL Jz
-			if (i + start + 5 + *reinterpret_cast<std::uintptr_t*>(&page_memory[1]) == optargs.xref_trace_int)
+			if (i + start + 5 + *reinterpret_cast<std::uint32_t*>(&page_memory[1]) == optargs.xref_trace_int)
 				local_results.push_back({ start + i });
 			break;
 		case 0x48:
 			if (!proc.is32)
 				switch (page_memory[i+1]) {
 					case 0x8D:
-						if (i + start + 7 + *reinterpret_cast<std::uintptr_t*>(&page_memory[3]) == optargs.xref_trace_int)
+						if (i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[3]) == optargs.xref_trace_int)
 							local_results.push_back({ start + i });
 
 					break;
@@ -396,6 +396,8 @@ void scanner_cfg_templates::function_xref_scan_internal_default(const scanner_ar
 	return;
 }
 
+constexpr std::uint8_t prologue_sig_1[] = {0x89, 0x44, 0x24};
+constexpr std::uint8_t prologue_sig_2[] = {0x55, 0x48, 0x83, 0xEC};
 std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func) {
 	MEMORY_BASIC_INFORMATION mbi;
 
@@ -425,6 +427,18 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 			case 0x56:
 				if (proc.is32)
 					if (page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xF1)
+						return base_address + loc;
+			case 0x4C:
+				if (!proc.is32)
+					if (!std::memcmp(&page_memory[loc+1], &prologue_sig_1, 3))
+						return base_address + loc;
+			case 0x40:
+				if (!proc.is32)
+					if (!std::memcmp(&page_memory[loc+1], &prologue_sig_2, 4))
+						return base_address + loc;
+			case 0x48:
+				if (!proc.is32)
+					if (page_memory[loc+1] == 0x89 and (page_memory[loc+2] == 0x5C or page_memory[loc+2] == 0x4C or page_memory[loc+2] == 0x54) and page_memory[loc+3] == 0x24)
 						return base_address + loc;
 			default:
 				break;
@@ -628,7 +642,7 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 			switch (page_memory[loc]) {
 			case 0xE9: // JMP Jz
 				if (proc.is32) {
-					rel_loc = loc + func_base + 5 + *reinterpret_cast<std::uintptr_t*>(&page_memory[1]);
+					rel_loc = loc + func_base + 5 + *reinterpret_cast<std::uint32_t*>(&page_memory[1]);
 					if (functions_only and (rel_loc % 16 != 0))
 						break;
 
@@ -637,7 +651,7 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 				break;
 			case 0xEA: // JMP Ap
 				if (proc.is32) {
-					rel_loc = *reinterpret_cast<std::uintptr_t*>(&page_memory[loc+1]);
+					rel_loc = *reinterpret_cast<std::uint32_t*>(&page_memory[loc+1]);
 					if (functions_only and (rel_loc % 16 != 0))
 						break;
 

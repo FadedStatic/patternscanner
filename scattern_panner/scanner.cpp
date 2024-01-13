@@ -90,63 +90,43 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	const auto is_modulerange = !config.module_scanned.empty();
 	auto mod_found = proc.curr_mod;
 
-	const auto scan_base_address = is_internal ? 
-	[config, is_modulerange] {
-		return reinterpret_cast<std::uintptr_t>(is_modulerange ? GetModuleHandleA(nullptr) : GetModuleHandleA(config.module_scanned.data()));
-	}()
-	:
-	[proc, config, &mod_found, is_modulerange] {
+	auto scan_base_address = reinterpret_cast<std::uintptr_t>(is_modulerange and is_internal ? GetModuleHandleA(config.module_scanned.data()) : GetModuleHandleA(nullptr));
+
+	if (!is_internal ) {
 		if (is_modulerange) {
-			mod_found = [proc, config] {
-				std::vector<HMODULE> module_list(max_modules);
-				DWORD n_modules{ 0 };
-				std::string module_name(MAX_PATH, '\x0');
+			std::vector<HMODULE> module_list(max_modules);
+			DWORD n_modules{ 0 };
+			std::string module_name(MAX_PATH, '\x0');
 
-				if (K32EnumProcessModulesEx(proc.curr_proc, module_list.data(), static_cast<std::uint32_t>(module_list.capacity()) * sizeof(HMODULE), &n_modules, LIST_MODULES_ALL)) {
-					module_list.resize(n_modules / sizeof(HMODULE));
-					for (const auto& j : module_list) {
-						if (K32GetModuleBaseNameA(proc.curr_proc, j, module_name.data(), MAX_PATH)) {
-							std::erase_if(module_name, [](const char c) {
-								return !c;
-							});
+			if (K32EnumProcessModulesEx(proc.curr_proc, module_list.data(), static_cast<std::uint32_t>(module_list.capacity()) * sizeof(HMODULE), &n_modules, LIST_MODULES_ALL)) {
+				module_list.resize(n_modules / sizeof(HMODULE));
+				for (const auto& j : module_list) {
+					if (K32GetModuleBaseNameA(proc.curr_proc, j, module_name.data(), MAX_PATH)) {
+						std::erase_if(module_name, [](const char c) {
+							return !c;
+						});
 
-							if (module_name == config.module_scanned)
-								return j;
-						}
-
-						module_name.clear();
-						module_name.resize(MAX_PATH);
+						if (module_name == config.module_scanned)
+							mod_found = j;
 					}
+
+					module_name.clear();
+					module_name.resize(MAX_PATH);
 				}
-				throw std::runtime_error("No module found under this name.");
-			}();
+			}
 		}
 
 		MODULEINFO mod_info;
 		if (K32GetModuleInformation(proc.curr_proc, mod_found, &mod_info, sizeof(mod_info)))
-			return reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
+			scan_base_address = reinterpret_cast<std::uintptr_t>(mod_info.lpBaseOfDll);
+	}
 
-		throw std::runtime_error("Error getting module base address. Call GetLastError for more information.");
-	}();
-
-	const auto scan_end_address = is_internal ?
-	[config, proc, scan_base_address, is_modulerange] {
-		return is_modulerange ? [config, proc, scan_base_address] {
-			MODULEINFO mod_info;
-			if (K32GetModuleInformation(proc.curr_proc, GetModuleHandleA(config.module_scanned.data()), &mod_info, sizeof(mod_info)))
-				return scan_base_address + mod_info.SizeOfImage;
-
-			throw std::runtime_error("Error getting end address from module in GetModuleInformation. Call GetLastError for more information.");
-		}() : ~0ull;
-	}()
-	:
-	[proc, mod_found, scan_base_address] {
+	auto scan_end_address = ~0ull;
+	if (is_modulerange) {
 		MODULEINFO mod_info;
-		if (K32GetModuleInformation(proc.curr_proc, mod_found, &mod_info, sizeof(mod_info)))
-			return scan_base_address + static_cast<std::uintptr_t>(mod_info.SizeOfImage);
-
-		throw std::runtime_error("Error getting end address from module in GetModuleInformation. Call GetLastError for more information. Type 2.");
-	}();
+		if (K32GetModuleInformation(proc.curr_proc, is_internal ? GetModuleHandleA(config.module_scanned.data()) : mod_found, &mod_info, sizeof(mod_info)))
+			scan_end_address = scan_base_address + mod_info.SizeOfImage;
+	}
 
 	if (!mod_found)
 		return ret;
@@ -154,12 +134,20 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 	MEMORY_BASIC_INFORMATION mbi;
 
 	for (auto scan_address = scan_base_address; scan_address < scan_end_address; scan_address += 16) {
-		// Credits to Fishy for suggesting ternary.
+		// Credits to Fishy.
 		if (is_internal ? !VirtualQuery(reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)) : !VirtualQueryEx(proc.curr_proc, reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
 			break;
 
 		if (config.page_flag_check(mbi.Protect)) {
-			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external),scanner_args{ std::ref(proc), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress), reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize, std::ref(ret_lock), std::ref(ret), std::ref(aob), std::ref(mask), std::ref(opt_args)});
+			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external),
+				scanner_args {
+					std::ref(proc),
+					reinterpret_cast<std::uintptr_t>(mbi.BaseAddress),
+					reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize,
+					std::ref(ret_lock), std::ref(ret),
+					std::ref(aob), std::ref(mask),
+					std::ref(opt_args)
+				});
 			thread_list.push_back(std::move(analyze_page));
 		}
 
@@ -197,7 +185,7 @@ void scanner_cfg_templates::aob_scan_routine_external_default(const scanner_args
 
 		local_results.push_back({ i+start });
 
-		// this is where that stupid "optimization" started, this was the cleanest solution I could think of
+		// this is where that "optimization" started, this was the cleanest solution I could think of
 		out_of_scope:
 		continue;
 	}
@@ -226,7 +214,7 @@ std::vector<scan_result> scanner::string_scan(const process& proc, const std::st
 		const auto loc = static_cast<std::uint32_t>(str_results[n_result].loc);
 		std::memcpy(str_loc_endianized.data(), &loc, 4);
 	}
-	std::printf("%s\n", str_loc_endianized.data());
+
 	return scan(proc, "strscan", "xxxxxxx", { config.module_scanned, config.page_flag_check, config.min_page_size, config.max_page_size, scanner_cfg_templates::string_xref_scan_internal_default, scanner_cfg_templates::string_xref_scan_external_default }, { str_loc_endianized, str_results[n_result].loc });
 }
 
@@ -249,19 +237,19 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 		case 0xBA: // mov edx, offset loc_01020304 -> BA 04 03 02 01
 		case 0xB8: // mov eax, offset loc_01020304 -> B8 04 03 02 01
 		case 0x68: // push offset loc_01020304 -> 68 04 03 02 01
-			if (proc.is32 && i+5 < page_size && !std::memcmp(&xref_trace[0], &page_memory[i+1], 4))
+			if (proc.is32 and i+5 < page_size and !std::memcmp(&xref_trace[0], &page_memory[i+1], 4))
 				local_results.push_back({ start + i });
 			break;
 		case 0xC7: // mov [reg + off], loc_01020304 -> C7 ? ? 04 03 02 01
 		//case 0x0F: // Twobyte, this can pessimize performance (twice as slow), so it is advised that you leave this off.
-			if (proc.is32 && i+7 < page_size && !std::memcmp(&xref_trace[0], &page_memory[i+3], 4))
+			if (proc.is32 and i+7 < page_size and !std::memcmp(&xref_trace[0], &page_memory[i+3], 4))
 					local_results.push_back({ start + i });
 				
 			break;
 
 		// RELATIVE
 		case 0x48: // LEA Gv M
-			if (!proc.is32 && i+7 < page_size && i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[i+3]) == optargs.xref_trace_int)
+			if (!proc.is32 and i+7 < page_size and i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[i+3]) == optargs.xref_trace_int)
 				local_results.push_back({ start + i });
 		break;
 
@@ -440,8 +428,8 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 			switch (page_memory[loc])
 			{
 			case 0xC3:
-				remaining = 15 - (loc % 16);
-				if ((loc + remaining) < page_size)
+				remaining = 15 - loc % 16;
+				if (loc + remaining < page_size)
 				{
 					for (auto finding = loc+1; finding < (all_alignment ? loc+remaining+1 : loc+min_alignment+1); finding++)
 					{

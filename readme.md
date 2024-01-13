@@ -9,27 +9,9 @@ It allows you to:
 - Find all of the calls and jumps of a function 
 
 What sets this pattern scanner apart from other pattern scanners is that it is multithreaded, which means that it can scan multiple pages at the same time. \
-This design is ideal in most external applications, but when working internally (from within a program) it may not be ideal as creating a thread for every page is not exactly discrete. 
-## Images
-There are no images at the moment, but I will post some with benchmarks. Also, any benchmark binaries I use will be in the solution by default.
+This design is ideal in most external applications, but when working internally (from within a program) it may not be ideal as creating a thread for every page is not exactly discrete.
 
-## How will I focus on performance?
-I will be using both the AMD build and the Intel build to profile code using AMD uProf and Intel vTune.\
-This will enable me to see which parts of the source are using the most CPU time, and I will try to find optimizations to lower scan times.\
-The benches I will use have the following specs:
-
-#### Bench 1 - AMD Build
-CPU: AMD Ryzen 9 7900X\
-RAM: 32GB CL36 DDR5 5600 MHz
-
-#### Bench 2 - Intel Build
-CPU: Intel Core i5 9300H\
-RAM: 64GB CL22 DDR4 3200 MHz
-
-The reason for using an Intel and AMD bench is to ensure that this project will run smoothly on different platforms and that the optimizations will be effective throughout.\
-Also, I can use hardware-level profiling on both platforms to ensure that everything works properly.
-
-## Do I plan to support this in the future?
+## How to Contribute
 Contributors are always welcome, and I like to make the process of contributing as straightforward as possible. \
 To contribute, fork the project and then make your own pull request on this project comparing your fork to the current project. \
 When contributing, add yourself to the bottom of the contributors section of the readme (if you are not already in it). \

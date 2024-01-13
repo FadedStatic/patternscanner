@@ -213,7 +213,7 @@ void scanner_cfg_templates::aob_scan_routine_external_default(const scanner_args
 
 		local_results.push_back({ i+start });
 		out_of_scope:
-		continue; // compiler gets mad if this isnt here
+		continue;
 	}
 
 	if (!local_results.empty()) {
@@ -355,41 +355,27 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, &n_read);
 
 	for (auto i = 0ull; i < page_memory.size(); i++) {
-		// in this case, we are sacrificing some readability for performance.
-		if (proc.is32)
-			goto x86_opcode_switch;
-
 		switch (page_memory[i]) {
+		// RELATIVE
+			case 0xE8: // CALL Jz
+			if (i + start + 5 + *reinterpret_cast<std::uintptr_t*>(&page_memory[1]) == optargs.xref_trace_int)
+				local_results.push_back({ start + i });
+			break;
 		case 0x48:
-			switch (page_memory[i+1]) {
-				case 0x8D:
-					if (i + start + 7 + (page_memory[i + 3] | page_memory[i + 4] << 8 | page_memory[i + 5] << 16 | page_memory[i + 6] << 24) == optargs.xref_trace_int)
-						local_results.push_back({ start + i });
+			if (!proc.is32)
+				switch (page_memory[i+1]) {
+					case 0x8D:
+						if (i + start + 7 + *reinterpret_cast<std::uintptr_t*>(&page_memory[3]) == optargs.xref_trace_int)
+							local_results.push_back({ start + i });
 
-				break;
-			default:break;
-			}
-			break;
-		// RELATIVE
-		case 0xE8: // CALL Jz
-			if (i + start + 5 + (page_memory[i + 1] | page_memory[i + 2] << 8 | page_memory[i + 3] << 16 | page_memory[i + 4] << 24) == optargs.xref_trace_int)
-				local_results.push_back({ start + i });
+					break;
+					default:break;
+				}
 		break;
-		default:break;
-		}
-		continue;
-
-		x86_opcode_switch:
-		switch (page_memory[i]) {
-		// RELATIVE
-		case 0xE8: // CALL Jz
-			if (i + start + 5 + (page_memory[i + 1] | page_memory[i + 2] << 8 | page_memory[i + 3] << 16 | page_memory[i + 4] << 24) == optargs.xref_trace_int)
-				local_results.push_back({ start + i });
-			break;
 		// ABSOLUTE
 		case 0x68: // PUSH Av
-		case 0x9A: // CALL Az
-			if (page_memory[i + 1] == static_cast<std::uint8_t>(xref_trace[0]) and page_memory[i + 2] == static_cast<std::uint8_t>(xref_trace[1]) and page_memory[i + 3] == static_cast<std::uint8_t>(xref_trace[2]) and page_memory[i + 4] == static_cast<std::uint8_t>(xref_trace[3]))
+			case 0x9A: // CALL Az
+			if (proc.is32 and !std::memcmp(&page_memory[i+1], &xref_trace[0], 4))
 				local_results.push_back({ start + i });
 			break;
 
@@ -504,7 +490,7 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 
 					return func + loc + remaining;
 
-					// pretty much although they say DONT DO THIS, it's basically just going to jmp to this part of the branch instead of jz at the end, it's like a tiny optimization
+					// this is an optimization, it's better for performance.
 					out_of_bounds:
 					continue;
 				default:
@@ -642,7 +628,7 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 			switch (page_memory[loc]) {
 			case 0xE9: // JMP Jz
 				if (proc.is32) {
-					rel_loc = loc + func_base + 5 + (page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24);
+					rel_loc = loc + func_base + 5 + *reinterpret_cast<std::uintptr_t*>(&page_memory[1]);
 					if (functions_only and (rel_loc % 16 != 0))
 						break;
 
@@ -651,7 +637,7 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 				break;
 			case 0xEA: // JMP Ap
 				if (proc.is32) {
-					rel_loc = page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24;
+					rel_loc = *reinterpret_cast<std::uintptr_t*>(&page_memory[loc+1]);
 					if (functions_only and (rel_loc % 16 != 0))
 						break;
 

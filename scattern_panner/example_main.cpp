@@ -32,16 +32,21 @@ int main()
 	};
 
 	const auto opened_process = process("victim_app.exe");
-	std::printf("Process ID: %llu\nProcess base address: %02llX\nProcess is under wow64: %d\n", opened_process.pid, opened_process.proc_base, opened_process.is32);
+	std::printf("Process ID: %llu\nProcess base address: 0x%02llX\nProcess is under wow64: %d\n", opened_process.pid, opened_process.proc_base, opened_process.is32);
 
 	// scan for xrefs to "BASE STRING PREFIX"
 	const auto str_results = scanner::string_scan(opened_process, "BASE STRING PREFIX");
 	for (const auto & [loc] : str_results) {
-		std::printf("String xref found at: %02llX\n", util::rebase(opened_process, loc));
+		std::printf("String xref found at: 0x%02llX\n", util::rebase(opened_process, loc));
 	}
 
 	const auto SCAN_FOR_ME = util::get_prologue(opened_process, str_results[0].loc);
-	std::printf("SCAN_FOR_ME: %02llX\n", util::rebase(opened_process, SCAN_FOR_ME));
+	std::printf("SCAN_FOR_ME: 0x%02llX\n", util::rebase(opened_process, SCAN_FOR_ME));
+
+	const auto scan_for_me_xrefs = scanner::xref_scan(opened_process, SCAN_FOR_ME);
+	for (const auto & [loc] : scan_for_me_xrefs) {
+		std::printf("SCAN_FOR_ME xref found at: 0x%02llX\n", util::rebase(opened_process, loc));
+	}
 
 	std::cin.get();
 	return 0;

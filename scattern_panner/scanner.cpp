@@ -357,11 +357,12 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 	for (auto i = 0ull; i < page_memory.size(); i++) {
 		switch (page_memory[i]) {
 		// RELATIVE
-			case 0xE8: // CALL Jz
+		case 0xE9: // JMP Jz
+		case 0xE8: // CALL Jz
 			if (i + start + 5 + *reinterpret_cast<std::uint32_t*>(&page_memory[1]) == optargs.xref_trace_int)
 				local_results.push_back({ start + i });
 			break;
-		case 0x48:
+		case 0x48: // 64bit operation
 			if (!proc.is32)
 				switch (page_memory[i+1]) {
 					case 0x8D:
@@ -584,18 +585,14 @@ std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr
 		for (auto loc = 0ull; loc < func_sz; loc++) {
 			switch (page_memory[loc]) {
 			case 0x9A: // CALL Az
-				if (proc.is32) {
 					rel_loc = page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24;
 					if (rel_loc % 16 == 0)
 						scan_results.push_back({ rel_loc });
-				}
 				break;
 			case 0xE8: // CALL Jz
-				if (proc.is32) {
 					rel_loc = loc + func_base + 5 + (page_memory[loc + 1] | page_memory[loc + 2] << 8 | page_memory[loc + 3] << 16 | page_memory[loc + 4] << 24);
 					if (rel_loc % 16 == 0)
 						scan_results.push_back({ rel_loc });
-				}
 
 			default:
 				break;

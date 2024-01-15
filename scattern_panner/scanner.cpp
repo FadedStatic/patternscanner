@@ -258,9 +258,16 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 			break;
 
 		// RELATIVE
-		case 0x48: // LEA Gv M
-			if (!proc.is32 and i+7 < page_size and i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[i+3]) == optargs.xref_trace_int)
-				local_results.push_back({ start + i });
+		case 0x48: // 64bit operation
+			if (!proc.is32)
+				switch (page_memory[i+1]) {
+					case 0x8D: // LEA
+						if (i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[3]) == optargs.xref_trace_int)
+							local_results.push_back({ start + i });
+
+					break;
+					default:break;
+				}
 		break;
 
 		default:break;
@@ -382,32 +389,40 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 
 		for (auto loc = (func - (func % 16)) - base_address; loc > 0; loc -= 16) {
 			switch (page_memory[loc]) {
+			// 32-bit prologues
 			case 0x53:
-				if (proc.is32)
-					if ((page_memory[loc + 1] == 0x8B and ((page_memory[loc + 2] == 0xDC) or (page_memory[loc + 2] == 0xD9))) or (page_memory[loc + 1] == 0x56 and page_memory[loc + 2] == 0x8B and page_memory[loc + 3] == 0xD9))
-						return base_address + loc;
+				if (proc.is32 && (page_memory[loc + 1] == 0x8B and ((page_memory[loc + 2] == 0xDC) or (page_memory[loc + 2] == 0xD9))) or (page_memory[loc + 1] == 0x56 and page_memory[loc + 2] == 0x8B and page_memory[loc + 3] == 0xD9))
+					return base_address + loc;
 				break;
 
 			case 0x55:
-				if (proc.is32)
-					if (page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC)
-						return base_address + loc;
+				if (proc.is32 && page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC)
+					return base_address + loc;
+				break;
+
 			case 0x56:
-				if (proc.is32)
-					if (page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xF1)
-						return base_address + loc;
+				if (proc.is32 && page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xF1)
+					return base_address + loc;
+				break;
+
+			// 64-bit prologues
 			case 0x4C:
 				if (!proc.is32)
 					if (!std::memcmp(&page_memory[loc+1], &prologue_sig_1, 3))
 						return base_address + loc;
+				break;
+
 			case 0x40:
 				if (!proc.is32)
 					if (!std::memcmp(&page_memory[loc+1], &prologue_sig_2, 4))
 						return base_address + loc;
+				break;
+
 			case 0x48:
 				if (!proc.is32)
 					if (page_memory[loc+1] == 0x89 and (page_memory[loc+2] == 0x5C or page_memory[loc+2] == 0x4C or page_memory[loc+2] == 0x54) and page_memory[loc+3] == 0x24)
 						return base_address + loc;
+				break;
 			default:
 				break;
 			}

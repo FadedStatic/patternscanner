@@ -22,7 +22,7 @@
 #include <Psapi.h>
 #include <processthreadsapi.h>
 #include <thread>
-#include <filesystem>
+#include <expected>
 
 #define PERFORMANCE_PROFILING_MODE false
 #define SET_PRIORITY_OPTIMIZATION true 
@@ -124,9 +124,9 @@ namespace util
 	// functions_only: do an alignment check
 	std::vector<scan_result> get_jumps(const process& proc, const std::uintptr_t func, const bool functions_only=true, const bool include_twobyte_jmps=false);
 
-	std::uintptr_t get_prologue(const process& proc, const std::uintptr_t func);
+	auto get_prologue(const process& proc, const std::uintptr_t func) -> std::expected<std::uintptr_t, std::string>;
 
 	// all_alignment: all bytes after ret must be 0x90 or 0xC3 until the next prologue in order for a match to occur.
 	// min_alignment: use this if you know how many alignment bytes your function has before the epilogue
-	std::uintptr_t get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment=true, const std::uint32_t min_alignment = 0);
+	auto get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment=true, const std::uint32_t min_alignment = 0) -> std::expected<std::uintptr_t, std::string>;
 }

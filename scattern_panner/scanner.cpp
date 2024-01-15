@@ -14,6 +14,8 @@
 
 #include "scanner.hpp"
 
+#include <expected>
+
 
 #if PERFORMANCE_PROFILING_MODE == true
 	#include <chrono>
@@ -78,7 +80,11 @@ process::process(const std::string_view process_name) {
 		module_list.resize(max_modules);
 	}
 
-	throw std::runtime_error("Process not found.");
+	this->curr_proc = nullptr;
+	this->proc_base = 0;
+	this->curr_mod = nullptr;
+	this->is32 = false;
+	this->pid = 0;
 }
 
 std::vector<scan_result> scanner::scan(const process& proc, const std::string_view aob, const std::string_view mask, const scan_cfg& config, const scanner_optargs& opt_args) {
@@ -351,7 +357,7 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 		break;
 		// ABSOLUTE
 		case 0x68: // PUSH Av
-			case 0x9A: // CALL Az
+		case 0x9A: // CALL Az
 			if (proc.is32 and !std::memcmp(&page_memory[i+1], &xref_trace[0], 4))
 				local_results.push_back({ start + i });
 			break;
@@ -375,7 +381,7 @@ void scanner_cfg_templates::function_xref_scan_internal_default(const scanner_ar
 
 constexpr std::uint8_t prologue_sig_1[] = {0x89, 0x44, 0x24};
 constexpr std::uint8_t prologue_sig_2[] = {0x55, 0x48, 0x83, 0xEC};
-std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func) {
+auto util::get_prologue(const process& proc, const std::uintptr_t func) -> std::expected<std::uintptr_t, std::string> {
 	MEMORY_BASIC_INFORMATION mbi;
 
 	if (proc.pid != GetCurrentProcessId()) {
@@ -407,21 +413,18 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 
 			// 64-bit prologues
 			case 0x4C:
-				if (!proc.is32)
-					if (!std::memcmp(&page_memory[loc+1], &prologue_sig_1, 3))
-						return base_address + loc;
+				if (!proc.is32 && !std::memcmp(&page_memory[loc+1], &prologue_sig_1, 3))
+					return base_address + loc;
 				break;
 
 			case 0x40:
-				if (!proc.is32)
-					if (!std::memcmp(&page_memory[loc+1], &prologue_sig_2, 4))
-						return base_address + loc;
+				if (!proc.is32 && !std::memcmp(&page_memory[loc+1], &prologue_sig_2, 4))
+					return base_address + loc;
 				break;
 
 			case 0x48:
-				if (!proc.is32)
-					if (page_memory[loc+1] == 0x89 and (page_memory[loc+2] == 0x5C or page_memory[loc+2] == 0x4C or page_memory[loc+2] == 0x54) and page_memory[loc+3] == 0x24)
-						return base_address + loc;
+				if (!proc.is32 && page_memory[loc+1] == 0x89 and (page_memory[loc+2] == 0x5C or page_memory[loc+2] == 0x4C or page_memory[loc+2] == 0x54) and page_memory[loc+3] == 0x24)
+					return base_address + loc;
 				break;
 			default:
 				break;
@@ -429,14 +432,14 @@ std::uintptr_t util::get_prologue(const process& proc, const std::uintptr_t func
 		}
 
 		// blanket fix for functions between two pages.
-		return func - 512 > proc.proc_base+1000 ? get_prologue(proc, func - 512) : 0;
+		return func - 512 > proc.proc_base+1000 ? get_prologue(proc, func - 512) : std::unexpected("No prologue found.");
 	}
 
 	VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
-	return 0;
+	return std::unexpected("Not implemented yet.");
 }
 
-std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment, const std::uint32_t min_alignment) {
+auto util::get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment, const std::uint32_t min_alignment) -> std::expected<std::uintptr_t, std::string> {
 	MEMORY_BASIC_INFORMATION mbi;
 	if (proc.pid != GetCurrentProcessId()) {
 		VirtualQueryEx(proc.curr_proc, reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
@@ -469,15 +472,13 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 						switch (page_memory[loc+1])
 						{
 						case 0x53:
-							if (proc.is32)
-								if (!((page_memory[loc + 2] == 0x8B and ((page_memory[loc + 3] == 0xDC) or (page_memory[loc + 3] == 0xD9))) or (page_memory[loc + 2] == 0x56 and page_memory[loc + 3] == 0x8B and page_memory[loc + 4] == 0xD9)))
-									goto out_of_bounds;
+							if (proc.is32 && !((page_memory[loc + 2] == 0x8B and ((page_memory[loc + 3] == 0xDC) or (page_memory[loc + 3] == 0xD9))) or (page_memory[loc + 2] == 0x56 and page_memory[loc + 3] == 0x8B and page_memory[loc + 4] == 0xD9)))
+								goto out_of_bounds;
 							break;
 
 						case 0x55:
-							if (proc.is32)
-								if (!(page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC))
-									goto out_of_bounds;
+							if (proc.is32 && !(page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC))
+								goto out_of_bounds;
 						default:
 							goto out_of_bounds;
 							break;
@@ -505,15 +506,13 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 					if(remaining == 1 or !remaining) {
 						switch (page_memory[loc + 1]) {
 						case 0x53:
-							if (proc.is32)
-								if (!((page_memory[loc + 2] == 0x8B and ((page_memory[loc + 3] == 0xDC) or (page_memory[loc + 3] == 0xD9))) or (page_memory[loc + 2] == 0x56 and page_memory[loc + 3] == 0x8B and page_memory[loc + 4] == 0xD9)))
-									goto out_of_bounds_2;
+							if (proc.is32 && !((page_memory[loc + 2] == 0x8B and ((page_memory[loc + 3] == 0xDC) or (page_memory[loc + 3] == 0xD9))) or (page_memory[loc + 2] == 0x56 and page_memory[loc + 3] == 0x8B and page_memory[loc + 4] == 0xD9)))
+								goto out_of_bounds_2;
 							break;
 
 						case 0x55:
-							if (proc.is32)
-								if (!(page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC))
-									goto out_of_bounds_2;
+							if (proc.is32 && !(page_memory[loc + 1] == 0x8B and page_memory[loc + 2] == 0xEC))
+								goto out_of_bounds_2;
 						default:
 							goto out_of_bounds_2;
 						}
@@ -527,7 +526,7 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 			}
 		}
 
-		return 0;
+		return std::unexpected("Could not find prologue.");
 	}
 
 	VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
@@ -537,9 +536,16 @@ std::uintptr_t util::get_epilogue(const process& proc, const std::uintptr_t func
 std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr_t func) {
 	MEMORY_BASIC_INFORMATION mbi;
 	auto func_base = func;
-	if (func_base % 16 != 0)
-		func_base = get_prologue(proc, func_base);
-	const auto func_end = get_epilogue(proc, func_base);
+
+	std::expected<std::uintptr_t, std::string> _fn_base_tmp;
+	if (func_base % 16 != 0 && (_fn_base_tmp = get_prologue(proc, func_base)).has_value())
+		func_base = *_fn_base_tmp;
+
+	const auto _fn_end_tmp = get_epilogue(proc, func_base);
+	if (!_fn_end_tmp.has_value())
+		return {};
+
+	const auto func_end = *_fn_end_tmp;
 
 	std::vector<scan_result> scan_results;
 
@@ -586,9 +592,15 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 {
 	MEMORY_BASIC_INFORMATION mbi;
 	auto func_base = func;
-	if (func_base % 16 != 0)
-		func_base = get_prologue(proc, func_base);
-	const auto func_end = get_epilogue(proc, func_base);
+	std::expected<std::uintptr_t, std::string> _fn_base_tmp;
+	if (func_base % 16 != 0 && (_fn_base_tmp = get_prologue(proc, func_base)).has_value())
+		func_base = *_fn_base_tmp;
+
+	const auto _fn_end_tmp = get_epilogue(proc, func_base);
+	if (!_fn_end_tmp.has_value())
+		return {};
+
+	const auto func_end = *_fn_end_tmp;
 
 	std::vector<scan_result> scan_results;
 

@@ -20,4 +20,5 @@ If you discover a bug or issue in master, open an issue and I will do my best to
 ## Contributors
 As more people help contribute to this project, this list will expand.\
 [Fishy](https://github.com/Fish-Sticks) - General Consultation & Optimization \
+[Atrexus](https://github.com/atrexus) - General Consultation & Optimization \
 [Expr](https://github.com/expressiongz) - Ease-of-use changes & General Consultation

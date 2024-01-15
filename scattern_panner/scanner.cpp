@@ -14,8 +14,6 @@
 
 #include "scanner.hpp"
 
-#include <expected>
-
 
 #if PERFORMANCE_PROFILING_MODE == true
 	#include <chrono>

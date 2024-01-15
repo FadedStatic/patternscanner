@@ -32,8 +32,18 @@ process::process(const std::string_view process_name) {
 		const auto proc_handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, i);
 		DWORD n_modules{ 0 };
 
-		if (!proc_handle or !K32EnumProcessModulesEx(proc_handle, module_list.data(), static_cast<std::uint32_t>(module_list.capacity()) * sizeof(HMODULE), &n_modules, LIST_MODULES_ALL))
+		if (!proc_handle or !K32EnumProcessModulesEx(proc_handle, module_list.data(), static_cast<std::uint32_t>(module_list.capacity()) * sizeof(HMODULE), &n_modules, LIST_MODULES_ALL) or !K32GetModuleBaseNameA(proc_handle, 0, module_name.data(), MAX_PATH))
 			continue;
+
+		std::erase_if(module_name, [](const char c) {
+			return !c;
+		});
+
+		if (module_name != process_name) {
+			module_name.clear();
+			module_name.resize(MAX_PATH);
+			continue;
+		}
 
 		module_list.resize(n_modules / sizeof(HMODULE));
 		for (const auto& j : module_list) {

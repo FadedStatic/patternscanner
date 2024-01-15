@@ -22,17 +22,15 @@
 #include <Psapi.h>
 #include <processthreadsapi.h>
 #include <thread>
+#include <filesystem>
 
-// This part will be using preprocessor macros so that performance profiling isnt compiled by default, this way we save a negligible amount of CPU time
-#define PERFORMANCE_PROFILING_MODE false // true = true, false = false
-// False by default, this will set the priority of the process for better use of resources (faster scanning), this is advised for external applications but not for internal, as it could be detected easily.
-// Also note, this will set the priority back to the old priority when we are done with scanning.
+#define PERFORMANCE_PROFILING_MODE false
 #define SET_PRIORITY_OPTIMIZATION true 
 
 
 // Misc. Settings for the 
-constexpr auto max_modules = 512; // 512 by default
-constexpr auto max_processes = 1024; // 1024 by default
+constexpr auto max_modules = 512;
+constexpr auto max_processes = 1024;
 
 struct scan_result
 {
@@ -46,6 +44,9 @@ struct process
 	bool is32;
 	HANDLE curr_proc{ nullptr };
 	HMODULE curr_mod{ nullptr };
+
+	// process_is_owner: this basically means that your process is running on its own, not as a module of another process.
+	// if your process is running under a host such as conhost (console host) and is not being discovered, make this arg false.
 	explicit process(const std::string_view process_name);
 };
 

@@ -1,24 +1,16 @@
 /*
- * Copyright 2023 FadedStatic
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+	DWYW License (Do whatever you want)
+
+	Permission is hereby granted, free of charge, to any person obtaining
+	a copy of this software, to do whatever they want to do with this software.
+
+	This is not copyrighted, and you don't need to worry about licensing issues.
+
+	In no event shall the authors be liable for any claim,
+	damages, or other liability, whether in an action of contract,
+	tort or otherwise, arising from, out of or in connection with
+	the software or the use or other dealings in the software.
+*/
 
 #include <iostream>
 #include <Windows.h>
@@ -34,7 +26,7 @@ __declspec(noinline) std::uintptr_t get_module_base_address(const std::string_vi
 
 __declspec(noinline) std::string SCAN_FOR_ME()
 {
-	auto retn_string = std::string();
+	auto retn_string = std::string("BASE STRING PREFIX");
 	for (auto c : std::string(finding_nemo))
 		retn_string.push_back(c);
 

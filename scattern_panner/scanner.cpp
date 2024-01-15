@@ -262,7 +262,7 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 			if (!proc.is32)
 				switch (page_memory[i+1]) {
 					case 0x8D: // LEA
-						if (i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[3]) == optargs.xref_trace_int)
+						if (i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[i+3]) == optargs.xref_trace_int)
 							local_results.push_back({ start + i });
 
 					break;
@@ -335,14 +335,14 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 		// RELATIVE
 		case 0xE9: // JMP Jz
 		case 0xE8: // CALL Jz
-			if (i + start + 5 + *reinterpret_cast<std::uint32_t*>(&page_memory[1]) == optargs.xref_trace_int)
+			if (i + start + 5 + *reinterpret_cast<std::uint32_t*>(&page_memory[i+1]) == optargs.xref_trace_int)
 				local_results.push_back({ start + i });
 			break;
 		case 0x48: // 64bit operation
 			if (!proc.is32)
 				switch (page_memory[i+1]) {
 					case 0x8D:
-						if (i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[3]) == optargs.xref_trace_int)
+						if (i + start + 7 + *reinterpret_cast<std::uint32_t*>(&page_memory[i+3]) == optargs.xref_trace_int)
 							local_results.push_back({ start + i });
 
 					break;
@@ -608,7 +608,7 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 			switch (page_memory[loc]) {
 			case 0xE9: // JMP Jz
 				if (proc.is32) {
-					rel_loc = loc + func_base + 5 + *reinterpret_cast<std::uint32_t*>(&page_memory[1]);
+					rel_loc = loc + func_base + 5 + *reinterpret_cast<std::uint32_t*>(&page_memory[loc+1]);
 					if (functions_only and (rel_loc % 16 != 0))
 						break;
 

@@ -21,12 +21,12 @@
 
 process::process() {
 	IsWow64Process(GetCurrentProcess, reinterpret_cast<BOOL*>(&this->is32));
+	this->is32 = !!this->is32;
 	this->curr_proc = GetCurrentProcess();
 	this->curr_mod = GetModuleHandleA(nullptr);
 	this->proc_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleA(nullptr));
 	this->pid = GetCurrentProcessId();
 }
-
 
 process::process(const std::string_view process_name) {
 	std::vector<std::uint32_t> pid_list(max_processes);
@@ -72,7 +72,7 @@ process::process(const std::string_view process_name) {
 				}
 
 				IsWow64Process(proc_handle, reinterpret_cast<BOOL*>(&this->is32));
-
+				this->is32 = !!this->is32;
 				this->curr_proc = proc_handle;
 				this->pid = i;
 				this->curr_mod = j;
@@ -250,8 +250,6 @@ std::vector<scan_result> scanner::string_scan(const process& proc, const std::st
 	if (str_results.empty())
 		return str_results;
 
-	std::printf("%02lX\r\n", str_results[0].loc);
-
 	auto str_loc_endianized = std::string(4, '\x0');
 
 	if (proc.is32) {
@@ -317,6 +315,51 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 }
 
 void scanner_cfg_templates::string_xref_scan_internal_default(const scanner_args& args) {
+	const auto& [proc, start, end, return_vector_mutex, return_vector, aob, mask, optargs] = args;
+	const auto xref_trace = optargs.xref_trace_endianized;
+
+	std::vector<scan_result> local_results;
+
+	for (const auto* i = reinterpret_cast<std::uint8_t*>(start); i < reinterpret_cast<std::uint8_t*>(end); i++) {
+		switch (*i) {
+			// ABSOLUTE
+			case 0xB9: // mov ecx, offset loc_01020304 -> B9 04 03 02 01
+			case 0xBA: // mov edx, offset loc_01020304 -> BA 04 03 02 01
+			case 0xB8: // mov eax, offset loc_01020304 -> B8 04 03 02 01
+			case 0x68: // push offset loc_01020304 -> 68 04 03 02 01
+				if (proc.is32 and reinterpret_cast<std::uintptr_t>(i)+5 < end and !std::memcmp(&xref_trace[0], i+1, 4))
+					local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+			break;
+			case 0xC7: // mov [reg + off], loc_01020304 -> C7 ? ? 04 03 02 01
+				//case 0x0F: // Twobyte, this can pessimize performance (twice as slow), so it is advised that you leave this off.
+				if (proc.is32 and reinterpret_cast<std::uintptr_t>(i)+7 < end and !std::memcmp(&xref_trace[0], i+1, 4))
+					local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+
+			break;
+
+			// RELATIVE
+			case 0x48: // 64bit operation
+				if (!proc.is32)
+					switch (*(i+1)) {
+						case 0x8D: // LEA
+							if (reinterpret_cast<std::uintptr_t>(i) + start + 7 + *reinterpret_cast<const std::uint32_t*>(i) == optargs.xref_trace_int)
+								local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+
+						break;
+						default:break;
+					}
+			break;
+
+			default:break;
+		}
+	}
+
+	if (!local_results.empty()) {
+		return_vector_mutex.lock();
+		for (const auto& c : local_results)
+			return_vector.push_back(c);
+		return_vector_mutex.unlock();
+	}
 }
 
 std::vector<scan_result> scanner::xref_scan(const process& proc, const std::uintptr_t func, const scan_cfg& config, const bool include_twobyte) {

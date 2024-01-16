@@ -81,7 +81,7 @@ namespace scanner_cfg_templates
 		const std::uintptr_t page_flags = mbi.Protect;
 
 		// Credits to Fishy
-		return mbi.State == MEM_COMMIT &&  mbi.Type == MEM_IMAGE && page_flags && !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ)) && !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ));
+		return mbi.State == MEM_COMMIT && mbi.Type == MEM_IMAGE && page_flags && !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ)) && !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ));
 	};
 
 	void aob_scan_routine_internal_default(const scanner_args& args),

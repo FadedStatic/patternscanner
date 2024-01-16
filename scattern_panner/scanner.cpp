@@ -342,7 +342,7 @@ void scanner_cfg_templates::string_xref_scan_internal_default(const scanner_args
 				if (!proc.is32)
 					switch (*(i+1)) {
 						case 0x8D: // LEA
-							if (reinterpret_cast<std::uintptr_t>(i) + start + 7 + *reinterpret_cast<const std::uint32_t*>(i) == optargs.xref_trace_int)
+							if (reinterpret_cast<std::uintptr_t>(i) + 7 + *reinterpret_cast<const std::uint32_t*>(i+1) == optargs.xref_trace_int)
 								local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
 
 						break;
@@ -447,7 +447,48 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 }
 
 void scanner_cfg_templates::function_xref_scan_internal_default(const scanner_args& args) {
+	const auto& [proc, start, end, return_vector_mutex, return_vector, aob, mask, optargs] = args;
+	const auto xref_trace = optargs.xref_trace_endianized;
 
+	std::vector<scan_result> local_results;
+
+	for (const auto* i = reinterpret_cast<std::uint8_t*>(start); i < reinterpret_cast<std::uint8_t*>(end); i++) {
+		switch (*i) {
+			// ABSOLUTE
+			case 0x68: // PUSH Av
+			case 0x9A: // CALL Az
+			if (proc.is32 and !std::memcmp(i+1, &xref_trace[0], 4))
+				local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+			break;
+
+			// RELATIVE
+			case 0xE9: // JMP Jz
+			case 0xE8: // CALL Jz
+				if (reinterpret_cast<std::uintptr_t>(i) + 5 + *reinterpret_cast<const std::uint32_t*>(i+1) == optargs.xref_trace_int)
+					local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+			break;
+			case 0x48: // 64bit operation
+				if (!proc.is32)
+					switch (*(i+1)) {
+						case 0x8D: // LEA
+							if (reinterpret_cast<std::uintptr_t>(i) + 7 + *reinterpret_cast<const std::uint32_t*>(i+1) == optargs.xref_trace_int)
+								local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+
+						break;
+						default:break;
+					}
+			break;
+
+			default:break;
+		}
+	}
+
+	if (!local_results.empty()) {
+		return_vector_mutex.lock();
+		for (const auto& c : local_results)
+			return_vector.push_back(c);
+		return_vector_mutex.unlock();
+	}
 }
 
 constexpr std::uint8_t prologue_sig_1[] = {0x89, 0x44, 0x24};
@@ -507,7 +548,46 @@ auto util::get_prologue(const process& proc, const std::uintptr_t func) -> std::
 	}
 
 	VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
-	return std::unexpected("Not implemented yet.");
+
+	for (const auto* loc = reinterpret_cast<std::uint8_t*>(func - func % 16); loc > mbi.BaseAddress; loc -= 16) {
+		switch (*loc) {
+			// 32-bit prologues
+			case 0x53:
+				if (proc.is32 && (*(loc + 1) == 0x8B and (*(loc + 2) == 0xDC or *(loc + 2) == 0xD9)) or (*(loc + 1) == 0x56 and *(loc + 2) == 0x8B and *(loc + 3) == 0xD9))
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x55:
+				if (proc.is32 && *(loc + 1) == 0x8B and *(loc + 2) == 0xEC)
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x56:
+				if (proc.is32 && *(loc + 1) == 0x8B and *(loc + 2) == 0xF1)
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			// 64-bit prologues
+			case 0x4C:
+				if (!proc.is32 && !std::memcmp(loc+1, &prologue_sig_1, 3))
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x40:
+				if (!proc.is32 && !std::memcmp(loc+1, &prologue_sig_2, 4))
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x48:
+				if (!proc.is32 && *(loc + 1) == 0x89 and (*(loc + 2) == 0x5C or *(loc + 2) == 0x4C or *(loc + 2) == 0x54) and *(loc + 3) == 0x24)
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+			default:
+				break;
+		}
+	}
+
+	return std::unexpected("No prologue found.");
 }
 
 auto util::get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment, const std::uint32_t min_alignment) -> std::expected<std::uintptr_t, std::string> {
@@ -601,7 +681,7 @@ auto util::get_epilogue(const process& proc, const std::uintptr_t func, const bo
 	}
 
 	VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
-	return 0;
+	return std::unexpected("Not implemented.");
 }
 
 std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr_t func) {

@@ -48,6 +48,7 @@ struct process
 	// process_is_owner: this basically means that your process is running on its own, not as a module of another process.
 	// if your process is running under a host such as conhost (console host) and is not being discovered, make this arg false.
 	explicit process(const std::string_view process_name);
+	explicit process();
 };
 
 // INSTRUCTIONS FOR ADDING CUSTOM ARGUMENTS!
@@ -75,10 +76,12 @@ struct scanner_args
 namespace scanner_cfg_templates
 {
 	// This is an example, you can either make this a function or a variable containing lambda or std::function.
-	const auto page_flag_check_default = [](const std::uintptr_t page_flags) -> bool
+	const auto page_flag_check_default = [](const MEMORY_BASIC_INFORMATION mbi) -> bool
 	{
+		const std::uintptr_t page_flags = mbi.Protect;
+
 		// Credits to Fishy
-		return !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ)) && !(page_flags == PAGE_EXECUTE && !(page_flags & (PAGE_GUARD | PAGE_NOACCESS)));
+		return mbi.State == MEM_COMMIT &&  mbi.Type == MEM_IMAGE && page_flags && !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ)) && !(page_flags & (PAGE_NOACCESS | PAGE_GUARD)) && (page_flags & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_READ));
 	};
 
 	void aob_scan_routine_internal_default(const scanner_args& args),
@@ -93,9 +96,9 @@ struct scan_cfg
 {
 	std::string module_scanned;
 
-	std::function<bool(const std::uintptr_t)> page_flag_check = scanner_cfg_templates::page_flag_check_default;
+	std::function<bool(const MEMORY_BASIC_INFORMATION)> page_flag_check = scanner_cfg_templates::page_flag_check_default;
 
-	std::uintptr_t min_page_size = 0ull, max_page_size = ~0ull; // credits to Fishy for suggesting ~0ull
+	std::uintptr_t min_page_size = 0u, max_page_size = ~0u; // credits to Fishy for suggesting ~0ull
 
 	std::function<void(const scanner_args&) > scan_routine_internal = scanner_cfg_templates::aob_scan_routine_internal_default, scan_routine_external = scanner_cfg_templates::aob_scan_routine_external_default;
 };

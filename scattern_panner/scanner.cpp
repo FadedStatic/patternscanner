@@ -19,6 +19,15 @@
 	#include <chrono>
 #endif
 
+process::process() {
+	IsWow64Process(GetCurrentProcess, reinterpret_cast<BOOL*>(&this->is32));
+	this->is32 = !!this->is32;
+	this->curr_proc = GetCurrentProcess();
+	this->curr_mod = GetModuleHandleA(nullptr);
+	this->proc_base = reinterpret_cast<std::uintptr_t>(GetModuleHandleA(nullptr));
+	this->pid = GetCurrentProcessId();
+}
+
 process::process(const std::string_view process_name) {
 	std::vector<std::uint32_t> pid_list(max_processes);
 	std::vector<HMODULE> module_list(max_modules);
@@ -32,7 +41,7 @@ process::process(const std::string_view process_name) {
 		const auto proc_handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, i);
 		DWORD n_modules{ 0 };
 
-		if (!proc_handle or !K32EnumProcessModulesEx(proc_handle, module_list.data(), static_cast<std::uint32_t>(module_list.capacity()) * sizeof(HMODULE), &n_modules, LIST_MODULES_ALL) or !K32GetModuleBaseNameA(proc_handle, 0, module_name.data(), MAX_PATH))
+		if (!proc_handle or !K32EnumProcessModulesEx(proc_handle, module_list.data(), static_cast<std::uint32_t>(module_list.capacity()) * sizeof(HMODULE), &n_modules, LIST_MODULES_ALL) or !K32GetModuleBaseNameA(proc_handle, nullptr, module_name.data(), MAX_PATH))
 			continue;
 
 		std::erase_if(module_name, [](const char c) {
@@ -63,7 +72,7 @@ process::process(const std::string_view process_name) {
 				}
 
 				IsWow64Process(proc_handle, reinterpret_cast<BOOL*>(&this->is32));
-
+				this->is32 = !!this->is32;
 				this->curr_proc = proc_handle;
 				this->pid = i;
 				this->curr_mod = j;
@@ -152,12 +161,12 @@ std::vector<scan_result> scanner::scan(const process& proc, const std::string_vi
 		if (is_internal ? !VirtualQuery(reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)) : !VirtualQueryEx(proc.curr_proc, reinterpret_cast<LPCVOID>(scan_address), &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
 			break;
 
-		if (config.page_flag_check(mbi.Protect)) {
+		if (config.page_flag_check(mbi)) {
 			std::thread analyze_page(is_internal ? std::ref(config.scan_routine_internal) : std::ref(config.scan_routine_external),
 				scanner_args {
 					std::ref(proc),
 					reinterpret_cast<std::uintptr_t>(mbi.BaseAddress),
-					reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize,
+					reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + static_cast<std::uintptr_t>(mbi.RegionSize),
 					std::ref(ret_lock), std::ref(ret),
 					std::ref(aob), std::ref(mask),
 					std::ref(opt_args)
@@ -190,10 +199,10 @@ void scanner_cfg_templates::aob_scan_routine_external_default(const scanner_args
 
 	std::vector<scan_result> local_results;
 
-	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, &n_read);
+	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, reinterpret_cast<SIZE_T*>(&n_read));
 
-	for (auto i = 0ull; i < page_memory.size(); i++) {
-		for (auto j = 0ull; j < mask.length(); j++)
+	for (std::uintptr_t i = 0ull; i < page_memory.size(); i++) {
+		for (std::uintptr_t j = 0ull; j < mask.length(); j++)
 			if (mask[j] != '?' and (page_memory[i + j] != static_cast<std::uint8_t>(aob[j])))
 				goto out_of_scope;
 
@@ -213,7 +222,26 @@ void scanner_cfg_templates::aob_scan_routine_external_default(const scanner_args
 }
 
 void scanner_cfg_templates::aob_scan_routine_internal_default(const scanner_args& args) {
-	return;
+	const auto& [proc, start, end, return_vector_mutex, return_vector, aob, mask, ignore1] = args;
+	std::vector<scan_result> local_results;
+
+	for (const auto* i = reinterpret_cast<std::uint8_t*>(start); i < reinterpret_cast<std::uint8_t*>(end); i++) {
+		for (auto j = 0ull; j < mask.length(); j++)
+			if (mask[j] != '?' and *(i+j) != static_cast<std::uint8_t>(aob[j]))
+				goto out_of_scope;
+
+		local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+
+		out_of_scope:
+		continue;
+	}
+
+	if (!local_results.empty()) {
+		return_vector_mutex.lock();
+		for (const auto& c : local_results)
+			return_vector.push_back(c);
+		return_vector_mutex.unlock();
+	}
 }
 
 std::vector<scan_result> scanner::string_scan(const process& proc, const std::string_view str, const scan_cfg& config, const std::uintptr_t n_result) {
@@ -242,9 +270,9 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 	// Chunking, instead of locking the mutex (very slow) just do it when we're done.
 	std::vector<scan_result> local_results;
 
-	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, &n_read);
+	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, reinterpret_cast<SIZE_T*>(&n_read));
 
-	for (auto i = 0ull; i < page_memory.size(); i++) {
+	for (std::uintptr_t i = 0ull; i < page_memory.size(); i++) {
 		switch (page_memory[i]) {
 		// ABSOLUTE
 		case 0xB9: // mov ecx, offset loc_01020304 -> B9 04 03 02 01
@@ -287,6 +315,51 @@ void scanner_cfg_templates::string_xref_scan_external_default(const scanner_args
 }
 
 void scanner_cfg_templates::string_xref_scan_internal_default(const scanner_args& args) {
+	const auto& [proc, start, end, return_vector_mutex, return_vector, aob, mask, optargs] = args;
+	const auto xref_trace = optargs.xref_trace_endianized;
+
+	std::vector<scan_result> local_results;
+
+	for (const auto* i = reinterpret_cast<std::uint8_t*>(start); i < reinterpret_cast<std::uint8_t*>(end); i++) {
+		switch (*i) {
+			// ABSOLUTE
+			case 0xB9: // mov ecx, offset loc_01020304 -> B9 04 03 02 01
+			case 0xBA: // mov edx, offset loc_01020304 -> BA 04 03 02 01
+			case 0xB8: // mov eax, offset loc_01020304 -> B8 04 03 02 01
+			case 0x68: // push offset loc_01020304 -> 68 04 03 02 01
+				if (proc.is32 and reinterpret_cast<std::uintptr_t>(i)+5 < end and !std::memcmp(&xref_trace[0], i+1, 4))
+					local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+			break;
+			case 0xC7: // mov [reg + off], loc_01020304 -> C7 ? ? 04 03 02 01
+				//case 0x0F: // Twobyte, this can pessimize performance (twice as slow), so it is advised that you leave this off.
+				if (proc.is32 and reinterpret_cast<std::uintptr_t>(i)+7 < end and !std::memcmp(&xref_trace[0], i+1, 4))
+					local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+
+			break;
+
+			// RELATIVE
+			case 0x48: // 64bit operation
+				if (!proc.is32)
+					switch (*(i+1)) {
+						case 0x8D: // LEA
+							if (reinterpret_cast<std::uintptr_t>(i) + 7 + *reinterpret_cast<const std::uint32_t*>(i+1) == optargs.xref_trace_int)
+								local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+
+						break;
+						default:break;
+					}
+			break;
+
+			default:break;
+		}
+	}
+
+	if (!local_results.empty()) {
+		return_vector_mutex.lock();
+		for (const auto& c : local_results)
+			return_vector.push_back(c);
+		return_vector_mutex.unlock();
+	}
 }
 
 std::vector<scan_result> scanner::xref_scan(const process& proc, const std::uintptr_t func, const scan_cfg& config, const bool include_twobyte) {
@@ -332,9 +405,9 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 
 	std::vector<scan_result> local_results;
 
-	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, &n_read);
+	ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(start), page_memory.data(), page_size, reinterpret_cast<SIZE_T*>(&n_read));
 
-	for (auto i = 0ull; i < page_memory.size(); i++) {
+	for (std::uintptr_t i = 0ull; i < page_memory.size(); i++) {
 		switch (page_memory[i]) {
 		// RELATIVE
 		case 0xE9: // JMP Jz
@@ -374,7 +447,48 @@ void scanner_cfg_templates::function_xref_scan_external_default(const scanner_ar
 }
 
 void scanner_cfg_templates::function_xref_scan_internal_default(const scanner_args& args) {
-	return;
+	const auto& [proc, start, end, return_vector_mutex, return_vector, aob, mask, optargs] = args;
+	const auto xref_trace = optargs.xref_trace_endianized;
+
+	std::vector<scan_result> local_results;
+
+	for (const auto* i = reinterpret_cast<std::uint8_t*>(start); i < reinterpret_cast<std::uint8_t*>(end); i++) {
+		switch (*i) {
+			// ABSOLUTE
+			case 0x68: // PUSH Av
+			case 0x9A: // CALL Az
+			if (proc.is32 and !std::memcmp(i+1, &xref_trace[0], 4))
+				local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+			break;
+
+			// RELATIVE
+			case 0xE9: // JMP Jz
+			case 0xE8: // CALL Jz
+				if (reinterpret_cast<std::uintptr_t>(i) + 5 + *reinterpret_cast<const std::uint32_t*>(i+1) == optargs.xref_trace_int)
+					local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+			break;
+			case 0x48: // 64bit operation
+				if (!proc.is32)
+					switch (*(i+1)) {
+						case 0x8D: // LEA
+							if (reinterpret_cast<std::uintptr_t>(i) + 7 + *reinterpret_cast<const std::uint32_t*>(i+1) == optargs.xref_trace_int)
+								local_results.push_back({ reinterpret_cast<std::uintptr_t>(i) });
+
+						break;
+						default:break;
+					}
+			break;
+
+			default:break;
+		}
+	}
+
+	if (!local_results.empty()) {
+		return_vector_mutex.lock();
+		for (const auto& c : local_results)
+			return_vector.push_back(c);
+		return_vector_mutex.unlock();
+	}
 }
 
 constexpr std::uint8_t prologue_sig_1[] = {0x89, 0x44, 0x24};
@@ -389,7 +503,7 @@ auto util::get_prologue(const process& proc, const std::uintptr_t func) -> std::
 		std::size_t n_read;
 		std::vector<std::uint8_t> page_memory(page_size);
 		const auto base_address = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
-		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(base_address), page_memory.data(), page_size - (func - base_address), &n_read);
+		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(base_address), page_memory.data(), page_size - (func - base_address), reinterpret_cast<SIZE_T*>(&n_read));
 
 		for (auto loc = (func - (func % 16)) - base_address; loc > 0; loc -= 16) {
 			switch (page_memory[loc]) {
@@ -434,7 +548,46 @@ auto util::get_prologue(const process& proc, const std::uintptr_t func) -> std::
 	}
 
 	VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
-	return std::unexpected("Not implemented yet.");
+
+	for (const auto* loc = reinterpret_cast<std::uint8_t*>(func - func % 16); loc > mbi.BaseAddress; loc -= 16) {
+		switch (*loc) {
+			// 32-bit prologues
+			case 0x53:
+				if (proc.is32 && (*(loc + 1) == 0x8B and (*(loc + 2) == 0xDC or *(loc + 2) == 0xD9)) or (*(loc + 1) == 0x56 and *(loc + 2) == 0x8B and *(loc + 3) == 0xD9))
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x55:
+				if (proc.is32 && *(loc + 1) == 0x8B and *(loc + 2) == 0xEC)
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x56:
+				if (proc.is32 && *(loc + 1) == 0x8B and *(loc + 2) == 0xF1)
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			// 64-bit prologues
+			case 0x4C:
+				if (!proc.is32 && !std::memcmp(loc+1, &prologue_sig_1, 3))
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x40:
+				if (!proc.is32 && !std::memcmp(loc+1, &prologue_sig_2, 4))
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+
+			case 0x48:
+				if (!proc.is32 && *(loc + 1) == 0x89 and (*(loc + 2) == 0x5C or *(loc + 2) == 0x4C or *(loc + 2) == 0x54) and *(loc + 3) == 0x24)
+					return reinterpret_cast<std::uintptr_t>(loc);
+			break;
+			default:
+				break;
+		}
+	}
+
+	return std::unexpected("No prologue found.");
 }
 
 auto util::get_epilogue(const process& proc, const std::uintptr_t func, const bool all_alignment, const std::uint32_t min_alignment) -> std::expected<std::uintptr_t, std::string> {
@@ -447,7 +600,7 @@ auto util::get_epilogue(const process& proc, const std::uintptr_t func, const bo
 		std::size_t n_read;
 		std::vector<std::uint8_t> page_memory(page_size);
 		auto remaining = 0ull;
-		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(func), page_memory.data(), page_size, &n_read);
+		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(func), page_memory.data(), page_size, reinterpret_cast<SIZE_T*>(&n_read));
 
 		for (auto loc = 0ull; loc < page_size; loc++)
 		{
@@ -528,7 +681,7 @@ auto util::get_epilogue(const process& proc, const std::uintptr_t func, const bo
 	}
 
 	VirtualQuery(reinterpret_cast<LPCVOID>(func), &mbi, sizeof MEMORY_BASIC_INFORMATION);
-	return 0;
+	return std::unexpected("Not implemented.");
 }
 
 std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr_t func) {
@@ -547,7 +700,6 @@ std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr
 
 	std::vector<scan_result> scan_results;
 
-
 	if (proc.pid != GetCurrentProcessId()) {
 		VirtualQueryEx(proc.curr_proc, reinterpret_cast<LPCVOID>(func_base), &mbi, sizeof MEMORY_BASIC_INFORMATION);
 		
@@ -555,7 +707,7 @@ std::vector<scan_result> util::get_calls(const process& proc, const std::uintptr
 
 		std::size_t n_read;
 		std::vector<std::uint8_t> page_memory(func_sz);
-		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(func_base), page_memory.data(), func_sz, &n_read);
+		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(func_base), page_memory.data(), func_sz, reinterpret_cast<SIZE_T*>(&n_read));
 
 		std::uintptr_t rel_loc{0};
 		for (auto loc = 0ull; loc < func_sz; loc++) {
@@ -610,7 +762,7 @@ std::vector<scan_result> util::get_jumps(const process& proc, const std::uintptr
 
 		std::size_t n_read;
 		std::vector<std::uint8_t> page_memory(func_sz);
-		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(func_base), page_memory.data(), func_sz, &n_read);
+		ReadProcessMemory(proc.curr_proc, reinterpret_cast<LPCVOID>(func_base), page_memory.data(), func_sz, reinterpret_cast<SIZE_T*>(&n_read));
 
 		std::uintptr_t rel_loc{0};
 

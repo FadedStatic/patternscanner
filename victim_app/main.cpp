@@ -38,7 +38,8 @@ int main()
 	SetConsoleTitleA("Pattern Scanner Testing Application");
 	const auto str = SCAN_FOR_ME();
 
-	std::printf("Program Base Address: %02llX\nntdll.dll Base: %02llX\nAddress of str: %02llX\n", get_module_base_address(""), get_module_base_address("ntdll.dll"), reinterpret_cast<std::uintptr_t>(&finding_nemo) - get_module_base_address(""));
+	std::printf("Program Base Address: %02lX\nntdll.dll Base: %02lX\nAddress of str: %02lX\n", get_module_base_address(""), get_module_base_address("ntdll.dll"), reinterpret_cast<std::uintptr_t>(&finding_nemo) - get_module_base_address(""));
+
 	std::cin.get();
 
 	return get_module_base_address(str);
